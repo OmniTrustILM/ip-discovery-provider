@@ -1,9 +1,8 @@
-# CZERTAINLY Network Discovery Provider
+# Network Discovery Provider
 
-> This repository is part of the commercial open-source project CZERTAINLY. 
-> You can find more information about the project at [CZERTAINLY](https://github.com/CZERTAINLY/CZERTAINLY) repository, including the contribution guide.
+> This repository is part of the commercial open-source project ILM. You can find more information about the project at the [ILM](https://github.com/OmniTrustILM/ilm) repository, including the contribution guide.
 
-Network Discovery provider implements the logic of discovering certificates that are distributed over the network.
+Network Discovery Provider implements the logic of discovering certificates that are distributed over the network.
 
 Network Discovery Provider can discover certificates from:
 - Intranet - Scan the entire infrastructure inside an organization and discover the certificates from application and 
@@ -20,17 +19,17 @@ The `Connector` provides various options during the certificate, including:
 
 `Connector` discovers the certificates from the host without increasing the network traffic and congestion. When the connector receives the request to scan the host, it tries to connect to the ssl port (which can be left default to `443` or provided with custom value), captures the certificates and parses them. Once the certificates are successfully gathered, it is then sent back to the `Core` for storage and parsing. `Core` takes care of the rest.
 
-To know more about `Core`, refer to [CZERTAINLY Core](https://github.com/CZERTAINLY/CZERTAINLY-Core).
+To know more about `Core`, refer to [Core](https://github.com/OmniTrustILM/core).
 
 ## Interfaces
 
-Network discovery provider implements the `Discovery Provider` Interface from the CZERTAINLY Interfaces. To learn more about the interfaces and end points, refer to the [CZERTAINLY Interfaces](https://github.com/CZERTAINLY/CZERTAINLY-Interfaces).
+Network Discovery Provider implements the `Discovery Provider` Interface from the ILM Interfaces. To learn more about the interfaces and end points, refer to the [Interfaces](https://github.com/OmniTrustILM/interfaces).
 
-For more information regarding the `Discovery`, please refer to the [CZERTAINLY documentation](https://docs.czertainly.com).
+For more information regarding the `Discovery`, please refer to the [documentation](https://docs.otilm.com).
 
 ## Docker container
 
-Network Discovery Provider is provided as a Docker container. Use the `czertainly/czertainly-ip-discovery-provider:tagname` to pull the required image from the repository. It can be configured using the following environment variables:
+Network Discovery Provider is provided as a Docker container. Use the `hub.omnitrustregistry.com/ilm/ip-discovery-provider:tagname` to pull the required image from the repository. It can be configured using the following environment variables:
 
 | Variable        | Description                                              | Required                                           | Default value |
 |-----------------|----------------------------------------------------------|----------------------------------------------------|---------------|
