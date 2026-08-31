@@ -82,9 +82,12 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Test scope only: no main code uses BouncyCastle and no provider is registered.
+		     DiscoveryScanIntegrationTest uses it to mint the certificate its TLS endpoint serves. -->
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
 			<artifactId>bcpkix-jdk18on</artifactId>
+			<scope>test</scope>
 		</dependency>
 
 		<!-- https://mvnrepository.com/artifact/commons-net/commons-net -->

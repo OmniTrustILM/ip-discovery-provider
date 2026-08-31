@@ -39,3 +39,21 @@ Network Discovery Provider is provided as a Docker container. Use the `hub.omnit
 | `DB_SCHEMA`     | Database schema to use                                   | ![](https://img.shields.io/badge/-NO-red.svg)      | `network`     |
 | `PORT`          | Port where the service is exposed                        | ![](https://img.shields.io/badge/-NO-red.svg)      | `8080`        |
 | `JAVA_OPTS`     | Customize Java system properties for running application | ![](https://img.shields.io/badge/-NO-red.svg)      | `N/A`         |
+
+### Java runtime
+
+The image does not ship a full JRE. It carries a custom runtime built with `jlink`, containing only
+the modules the application resolves plus `jdk.crypto.ec` for the elliptic-curve handshakes and
+certificates the scanner encounters.
+
+This constrains `JAVA_OPTS`. Anything needing a module outside that set will fail to start rather
+than being ignored — a `-javaagent` JMX or APM agent (`java.instrument` is present, but the agent's
+own dependencies may not be), remote JMX (`jdk.management.agent`), or an additional security
+provider. Check the modules actually present with:
+
+```
+docker run --rm --entrypoint sh hub.omnitrustregistry.com/ilm/ip-discovery-provider:tagname -c 'java --list-modules'
+```
+
+If you need a module that is absent, raise an issue rather than working around it — the module set
+is derived at build time and can be extended through the image's `ADDITIONAL_MODULES` build argument.

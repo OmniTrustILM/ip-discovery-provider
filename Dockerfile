@@ -34,7 +34,7 @@ RUN jdeps \
 #   resolved through ServiceLoader rather than referenced in bytecode, and without it every
 #   ECDHE handshake and ECDSA certificate fails -- which is most of what this connector scans.
 # Extend through ADDITIONAL_MODULES rather than editing the jlink invocation.
-ENV ADDITIONAL_MODULES=jdk.crypto.ec
+ARG ADDITIONAL_MODULES=jdk.crypto.ec
 RUN $JAVA_HOME/bin/jlink \
     --add-modules $(cat modules.txt),${ADDITIONAL_MODULES} \
     --strip-debug \
