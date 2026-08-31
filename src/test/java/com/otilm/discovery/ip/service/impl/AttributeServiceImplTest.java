@@ -135,8 +135,10 @@ class AttributeServiceImplTest {
 
     @Test
     void failsWhenTheIpAttributeIsAbsent() {
+        List<RequestAttribute> withoutIp = List.of(port("443"));
+
         Assertions.assertThrows(ValidationException.class,
-                () -> AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(List.of(port("443"))));
+                () -> AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(withoutIp));
     }
 
     @Test

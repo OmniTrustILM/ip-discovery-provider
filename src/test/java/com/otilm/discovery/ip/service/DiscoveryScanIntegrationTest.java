@@ -36,12 +36,15 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+
+import static org.awaitility.Awaitility.await;
 
 /**
  * Drives a full discovery against a TLS endpoint served from this JVM, so the scan path - URL
@@ -150,11 +153,13 @@ class DiscoveryScanIntegrationTest {
         discoveryService.discoverCertificate(request, history);
 
         // The scan is @Async, so wait for the terminal status rather than racing it.
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (history.getStatus() == DiscoveryStatus.IN_PROGRESS && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50);
-        }
+        awaitTerminalStatus(history);
         return history;
+    }
+
+    private static void awaitTerminalStatus(DiscoveryHistory history) {
+        await().atMost(Duration.ofSeconds(30))
+                .until(() -> history.getStatus() != DiscoveryStatus.IN_PROGRESS);
     }
 
     @Test
@@ -222,10 +227,7 @@ class DiscoveryScanIntegrationTest {
         DiscoveryHistory history = discoveryHistoryService.addHistory(request);
         discoveryService.discoverCertificate(request, history);
 
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (history.getStatus() == DiscoveryStatus.IN_PROGRESS && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50);
-        }
+        awaitTerminalStatus(history);
 
         // One port serves TLS and the other refuses, so the scan completes with a partial result.
         Assertions.assertEquals(DiscoveryStatus.COMPLETED, history.getStatus());

@@ -24,8 +24,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+
+import static org.awaitility.Awaitility.await;
 
 /**
  * Covers the synchronous side of the discovery lifecycle - reading a discovery back, deleting it,
@@ -164,10 +167,8 @@ class DiscoveryServiceLifecycleTest {
 
         // discoverCertificate is @Async and @EnableAsync is unconditional, so the failure handler
         // runs on a virtual thread. Wait for it rather than racing it.
-        long deadline = System.currentTimeMillis() + 10_000;
-        while (history.getStatus() != DiscoveryStatus.FAILED && System.currentTimeMillis() < deadline) {
-            Thread.sleep(50);
-        }
+        await().atMost(Duration.ofSeconds(10))
+                .until(() -> history.getStatus() == DiscoveryStatus.FAILED);
 
         Assertions.assertEquals(DiscoveryStatus.FAILED, history.getStatus());
         Assertions.assertNotNull(history.getMeta());

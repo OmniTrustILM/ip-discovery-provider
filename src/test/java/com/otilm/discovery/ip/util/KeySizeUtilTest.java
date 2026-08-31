@@ -36,9 +36,9 @@ class KeySizeUtilTest {
     @Test
     void dsaKeyReportsPrimeLength() throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("DSA");
-        generator.initialize(1024);
+        generator.initialize(2048);
 
-        Assertions.assertEquals(1024, KeySizeUtil.getKeyLength(generator.generateKeyPair().getPublic()));
+        Assertions.assertEquals(2048, KeySizeUtil.getKeyLength(generator.generateKeyPair().getPublic()));
     }
 
     @Test

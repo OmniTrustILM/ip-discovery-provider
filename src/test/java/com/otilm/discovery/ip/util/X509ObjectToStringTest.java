@@ -5,7 +5,9 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import javax.security.auth.x500.X500Principal;
 import java.lang.reflect.Constructor;
@@ -62,8 +64,8 @@ class X509ObjectToStringTest {
 
     @Test
     void surfacesACertificateThatCannotBeEncoded() throws Exception {
-        X509Certificate broken = Mockito.mock(X509Certificate.class);
-        Mockito.when(broken.getEncoded()).thenThrow(new CertificateEncodingException("unencodable"));
+        X509Certificate broken = mock(X509Certificate.class);
+        when(broken.getEncoded()).thenThrow(new CertificateEncodingException("unencodable"));
 
         // JcaPEMWriter wraps the encoding failure in an IllegalArgumentException, so it bypasses the
         // IOException catch in toPem and reaches the caller. That catch only covers writer IO faults,
