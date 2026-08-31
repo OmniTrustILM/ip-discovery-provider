@@ -16,7 +16,6 @@ permissions:
 jobs:
   test:
     uses: OmniTrustILM/.github/.github/workflows/containers-test.yml@main
-    secrets: inherit
     with:
       image: ilm/ip-discovery-provider
       cache-scope: ip-discovery-provider
