@@ -1,12 +1,7 @@
 package com.otilm.discovery.ip.service;
 
 import com.otilm.api.exception.NotFoundException;
-import com.otilm.api.model.client.attribute.RequestAttribute;
-import com.otilm.api.model.client.attribute.RequestAttributeV2;
 import com.otilm.api.model.common.attribute.common.MetadataAttribute;
-import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
-import com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2;
-import com.otilm.api.model.common.attribute.v2.content.StringAttributeContentV2;
 import com.otilm.api.model.connector.discovery.DiscoveryDataRequestDto;
 import com.otilm.api.model.connector.discovery.DiscoveryProviderDto;
 import com.otilm.api.model.connector.discovery.DiscoveryRequestDto;
@@ -14,7 +9,6 @@ import com.otilm.api.model.core.discovery.DiscoveryStatus;
 import com.otilm.discovery.ip.dao.Certificate;
 import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import com.otilm.discovery.ip.repository.CertificateRepository;
-import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
 import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,16 +18,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
-import static org.awaitility.Awaitility.await;
-
 /**
- * Covers the synchronous side of the discovery lifecycle - reading a discovery back, deleting it,
- * and the failure path that records a reason. The scanning itself needs the network and is left to
- * DiscoveryServiceTest.
+ * Covers the synchronous side of the discovery lifecycle - reading a discovery back and deleting
+ * it. Anything @Async lives in DiscoveryScanIntegrationTest, which is non-transactional and can
+ * therefore assert committed state.
  */
 @SpringBootTest
 @Transactional
@@ -150,28 +141,4 @@ class DiscoveryServiceLifecycleTest {
                 () -> discoveryService.deleteDiscovery("00000000-0000-0000-0000-000000000000"));
     }
 
-    @Test
-    void recordsTheReasonWhenDiscoveryFails() throws Exception {
-        // No IP attribute, so URL expansion fails and the failure path records why.
-        DiscoveryRequestDto request = new DiscoveryRequestDto();
-        request.setName(history.getName());
-        request.setKind("IP-Hostname");
-        RequestAttributeV2 port = new RequestAttributeV2();
-        port.setUuid(UUID.fromString("a9091e0d-f9b9-4514-b275-1dd52aa870ec"));
-        port.setName(AttributeServiceImpl.DATA_ATTRIBUTE_PORT_NAME);
-        port.setContentType(AttributeContentType.STRING);
-        port.setContent(List.<BaseAttributeContentV2<?>>of(new StringAttributeContentV2("443")));
-        request.setAttributes(List.<RequestAttribute>of(port));
-
-        discoveryService.discoverCertificate(request, history);
-
-        // discoverCertificate is @Async and @EnableAsync is unconditional, so the failure handler
-        // runs on a virtual thread. Wait for it rather than racing it.
-        await().atMost(Duration.ofSeconds(10))
-                .until(() -> history.getStatus() == DiscoveryStatus.FAILED);
-
-        Assertions.assertEquals(DiscoveryStatus.FAILED, history.getStatus());
-        Assertions.assertNotNull(history.getMeta());
-        Assertions.assertTrue(history.getMeta().contains("reason"), history.getMeta());
-    }
 }

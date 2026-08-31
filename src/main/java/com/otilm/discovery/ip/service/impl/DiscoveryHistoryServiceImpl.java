@@ -39,14 +39,14 @@ public class DiscoveryHistoryServiceImpl implements DiscoveryHistoryService {
 	}
 
 	@Override
-	@Transactional(readOnly = true, noRollbackFor = NotFoundException.class)
+	@Transactional(readOnly = true)
 	public DiscoveryHistory getHistoryById(Long id) throws NotFoundException {
 		logger.debug("Finding the discovery history record for ID {}", id);
 		return discoveryHistoryRepository.findById(id).orElseThrow(() -> new NotFoundException(DiscoveryHistoryServiceImpl.class, id));
 	}
 
 	@Override
-	@Transactional(readOnly = true, noRollbackFor = NotFoundException.class)
+	@Transactional(readOnly = true)
 	public DiscoveryHistory getHistoryByUuid(String uuid) throws NotFoundException {
 		logger.debug("Finding the discovery history record for uuid {}", uuid);
 		return discoveryHistoryRepository.findByUuid(uuid).orElseThrow(() -> new NotFoundException(DiscoveryHistoryServiceImpl.class, uuid));

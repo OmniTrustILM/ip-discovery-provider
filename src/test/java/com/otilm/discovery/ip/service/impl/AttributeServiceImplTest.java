@@ -99,7 +99,8 @@ class AttributeServiceImplTest {
 
     @Test
     void rejectsAnUnsupportedKind() {
-        Assertions.assertThrows(IllegalArgumentException.class, () -> attributeService.getAttributes("Nope"));
+        // ValidationException maps to 422; an IllegalArgumentException would surface as a 500.
+        Assertions.assertThrows(ValidationException.class, () -> attributeService.getAttributes("Nope"));
     }
 
     // --- validateAttributes ---

@@ -116,15 +116,15 @@ public class AttributeServiceImpl implements AttributeService {
 
         List<BaseAttribute> attributes = new ArrayList<>();
 
-        if (DiscoveryKind.IP_Hostname.getCode().equals(kind)) {
-            attributes.add(createIpHostnameInfoAttribute());
-            attributes.add(createDiscoveryIpDataAttribute());
-            attributes.add(createPortDataAttribute());
-            attributes.add(createAllPortsDataAttribute());
-            attributes.add(createParallelExecutionsDataAttribute());
-        } else {
-            throw new IllegalArgumentException("Unsupported kind " + kind);
-        }
+        // Rejects an unknown kind with ValidationException, the same way validateAttributes does,
+        // so the controller answers a bad kind with 422 rather than falling through to a 500.
+        validateKind(kind);
+
+        attributes.add(createIpHostnameInfoAttribute());
+        attributes.add(createDiscoveryIpDataAttribute());
+        attributes.add(createPortDataAttribute());
+        attributes.add(createAllPortsDataAttribute());
+        attributes.add(createParallelExecutionsDataAttribute());
 
         logger.debug("Attributes constructed. {}", attributes);
         return attributes;

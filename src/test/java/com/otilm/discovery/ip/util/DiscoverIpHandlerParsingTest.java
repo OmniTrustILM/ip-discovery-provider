@@ -131,9 +131,11 @@ class DiscoverIpHandlerParsingTest {
     void allPortsOverridesTheProvidedList() {
         Set<String> ports = DiscoverIpHandler.getPorts("443", true);
 
+        // 1..65535 inclusive. Port 0 is not scannable and PORT_VALIDATION_REGEX rejects it.
         Assertions.assertEquals(65535, ports.size());
-        Assertions.assertTrue(ports.contains("0"));
-        Assertions.assertTrue(ports.contains("65534"));
+        Assertions.assertFalse(ports.contains("0"));
+        Assertions.assertTrue(ports.contains("1"));
+        Assertions.assertTrue(ports.contains("65535"));
     }
 
     @Test

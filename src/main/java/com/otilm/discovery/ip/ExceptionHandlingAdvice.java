@@ -99,7 +99,9 @@ public class ExceptionHandlingAdvice {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ErrorMessageDto handleException(Exception ex) {
+        // The message is logged, not returned: this is the ungated handler, so anything without a
+        // more specific mapping lands here -- SQL, host resolution and constraint text included.
         LOG.error("General error occurred: {}", ex.getMessage(), ex);
-        return ErrorMessageDto.getInstance("Internal server error. " + ex.getMessage());
+        return ErrorMessageDto.getInstance("Internal server error.");
     }
 }

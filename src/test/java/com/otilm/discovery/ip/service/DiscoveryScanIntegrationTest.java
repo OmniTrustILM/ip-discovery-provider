@@ -1,5 +1,6 @@
 package com.otilm.discovery.ip.service;
 
+import com.otilm.api.exception.NotFoundException;
 import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.attribute.RequestAttributeV2;
 import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
@@ -31,7 +32,9 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.security.auth.x500.X500Principal;
 import java.math.BigInteger;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
@@ -61,6 +64,7 @@ class DiscoveryScanIntegrationTest {
 
     private static HttpsServer server;
     private static int port;
+    private static int closedPort;
     private static X509Certificate servedCertificate;
 
     @Autowired
@@ -110,6 +114,12 @@ class DiscoveryScanIntegrationTest {
         server.setExecutor(null);
         server.start();
         port = server.getAddress().getPort();
+
+        // Bind and release a second port so it is known to have been free, rather than assuming
+        // the neighbour of an OS-assigned ephemeral port happens to be closed.
+        try (ServerSocket reserved = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
+            closedPort = reserved.getLocalPort();
+        }
     }
 
     @AfterAll
@@ -148,18 +158,27 @@ class DiscoveryScanIntegrationTest {
 
     private DiscoveryHistory runScanToCompletion(String name, int parallelExecutions) throws Exception {
         DiscoveryRequestDto request = scanRequest(name, parallelExecutions);
+        return runScanToCompletion(request);
+    }
+
+    private DiscoveryHistory runScanToCompletion(DiscoveryRequestDto request) throws Exception {
         DiscoveryHistory history = discoveryHistoryService.addHistory(request);
 
         discoveryService.discoverCertificate(request, history);
 
-        // The scan is @Async, so wait for the terminal status rather than racing it.
-        awaitTerminalStatus(history);
-        return history;
+        return awaitPersistedTerminalStatus(history.getUuid());
     }
 
-    private static void awaitTerminalStatus(DiscoveryHistory history) {
+    /**
+     * The scan runs on a virtual thread and flips the in-memory status two statements before it
+     * commits, so waiting on the passed entity can return while the closing transaction is still
+     * open. Reloading the row instead means both the wait and the assertions observe committed
+     * state, and avoids reading a non-volatile field across threads.
+     */
+    private DiscoveryHistory awaitPersistedTerminalStatus(String uuid) throws NotFoundException {
         await().atMost(Duration.ofSeconds(30))
-                .until(() -> history.getStatus() != DiscoveryStatus.IN_PROGRESS);
+                .until(() -> discoveryHistoryService.getHistoryByUuid(uuid).getStatus() != DiscoveryStatus.IN_PROGRESS);
+        return discoveryHistoryService.getHistoryByUuid(uuid);
     }
 
     @Test
@@ -222,15 +241,30 @@ class DiscoveryScanIntegrationTest {
                 .findFirst()
                 .ifPresent(a -> ((RequestAttributeV2) a)
                         .setContent(List.<BaseAttributeContentV2<?>>of(
-                                new StringAttributeContentV2(port + "," + (port == 65535 ? port - 1 : port + 1)))));
+                                new StringAttributeContentV2(port + "," + closedPort))));
 
-        DiscoveryHistory history = discoveryHistoryService.addHistory(request);
-        discoveryService.discoverCertificate(request, history);
+        DiscoveryHistory history = runScanToCompletion(request);
 
-        awaitTerminalStatus(history);
-
-        // One port serves TLS and the other refuses, so the scan completes with a partial result.
+        // One port serves TLS and the other is closed, so the scan completes with a partial result.
+        // Note this pins COMPLETED for a scan with failed URLs -- see the discussion on PR #96.
         Assertions.assertEquals(DiscoveryStatus.COMPLETED, history.getStatus());
         Assertions.assertEquals(1, certificateRepository.findByDiscoveryId(history.getId()).size());
+    }
+
+    @Test
+    void recordsTheReasonWhenDiscoveryFails() throws Exception {
+        // No IP attribute, so URL expansion fails and the failure path records why.
+        DiscoveryRequestDto request = new DiscoveryRequestDto();
+        request.setName("failure-" + UUID.randomUUID());
+        request.setKind("IP-Hostname");
+        request.setAttributes(List.<RequestAttribute>of(
+                attribute("a9091e0d-f9b9-4514-b275-1dd52aa870ec", AttributeServiceImpl.DATA_ATTRIBUTE_PORT_NAME,
+                        AttributeContentType.STRING, new StringAttributeContentV2("443"))));
+
+        DiscoveryHistory history = runScanToCompletion(request);
+
+        Assertions.assertEquals(DiscoveryStatus.FAILED, history.getStatus());
+        Assertions.assertNotNull(history.getMeta());
+        Assertions.assertTrue(history.getMeta().contains("reason"), history.getMeta());
     }
 }

@@ -29,7 +29,7 @@
 			src/main/java/com/otilm/discovery/ip/Application.java,
 			<!-- AOP aspect that only executes at DEBUG, and logs rather than decides -->
 			src/main/java/com/otilm/discovery/ip/LoggingAdvice.java,
-			<!-- annotation-driven exception-to-status mappings, no logic of their own -->
+			<!-- exception-to-status mappings; the catch-all logs and returns a fixed body -->
 			src/main/java/com/otilm/discovery/ip/ExceptionHandlingAdvice.java,
 			<!-- controllers delegate straight to the services, which are covered -->
 			src/main/java/com/otilm/discovery/ip/api/**,
