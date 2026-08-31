@@ -17,10 +17,6 @@ public enum JavaMigrationChecksums {
     private final int checksum;
     private final boolean isAltered;
 
-    JavaMigrationChecksums(int checksum) {
-        this(checksum, false);
-    }
-
     JavaMigrationChecksums(int checksum, boolean isAltered) {
         this.checksum = checksum;
         this.isAltered = isAltered;

@@ -35,13 +35,7 @@ public class InsecureSSL
     };
 
     // Hostname verifier for which ALL hosts valid
-    private static HostnameVerifier allHostsValid = new HostnameVerifier()
-    {
-        public boolean verify(String hostname, SSLSession session)
-        {
-            return true;
-        }
-    };
+    private static final HostnameVerifier allHostsValid = (hostname, session) -> true;
 
     public static HttpsURLConnection openInsecureConnection(URL url) throws IOException, NoSuchAlgorithmException, KeyManagementException {
         HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();

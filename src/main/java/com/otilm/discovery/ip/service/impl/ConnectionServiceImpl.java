@@ -6,7 +6,6 @@ import com.otilm.discovery.ip.util.InsecureSSL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.io.IOException;
@@ -17,8 +16,9 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
 
+// Deliberately not @Transactional: this service performs no persistence, it opens an outbound TLS
+// connection. A transaction here took a pooled database connection for every scanned URL.
 @Service
-@Transactional
 public class ConnectionServiceImpl implements ConnectionService {
 
     private static final Logger logger = LoggerFactory.getLogger(ConnectionServiceImpl.class);

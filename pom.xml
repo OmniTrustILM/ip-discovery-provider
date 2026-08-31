@@ -21,6 +21,25 @@
 		<sonar.organization>ilm</sonar.organization>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
 		<sonar.projectKey>ilm_ip-discovery-provider</sonar.projectKey>
+		<!-- Excluded from coverage only where there is no branching logic to assert, or where a live
+		     database is required. Everything carrying real logic stays in - notably config/** and
+		     enums/**, which the sibling connectors exclude but which are tested here. -->
+		<sonar.coverage.exclusions>
+			<!-- Spring Boot bootstrap: main() and nothing else -->
+			src/main/java/com/otilm/discovery/ip/Application.java,
+			<!-- AOP aspect that only executes at DEBUG, and logs rather than decides -->
+			src/main/java/com/otilm/discovery/ip/LoggingAdvice.java,
+			<!-- annotation-driven exception-to-status mappings, no logic of their own -->
+			src/main/java/com/otilm/discovery/ip/ExceptionHandlingAdvice.java,
+			<!-- controllers delegate straight to the services, which are covered -->
+			src/main/java/com/otilm/discovery/ip/api/**,
+			<!-- JPA entities and their accessors -->
+			src/main/java/com/otilm/discovery/ip/dao/**,
+			<!-- data holder -->
+			src/main/java/com/otilm/discovery/ip/dto/**,
+			<!-- Flyway Java migration: needs a populated database to exercise -->
+			src/main/java/db/migration/**
+		</sonar.coverage.exclusions>
 	</properties>
 
 	<dependencies>

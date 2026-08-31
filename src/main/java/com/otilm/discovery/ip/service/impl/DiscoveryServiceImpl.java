@@ -99,6 +99,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     }
 
     @Override
+    @Transactional(noRollbackFor = NotFoundException.class)
     public void deleteDiscovery(String uuid) throws NotFoundException {
         DiscoveryHistory discoveryHistory = discoveryHistoryService.getHistoryByUuid(uuid);
         List<Certificate> certificates = certificateRepository.findByDiscoveryId(discoveryHistory.getId());

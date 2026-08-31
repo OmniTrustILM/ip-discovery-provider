@@ -32,7 +32,9 @@ public class DiscoveryHistory extends Audited implements Serializable {
 	@Enumerated(EnumType.STRING)
 	private DiscoveryStatus status;
 	
-	@Column(name = "meta")
+	// TEXT in the schema; the length keeps generated DDL (tests) in step with it, as
+	// serialized metadata comfortably exceeds the 255-char default.
+	@Column(name = "meta", length = 1000000)
 	private String meta;
 
 	@Override

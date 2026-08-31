@@ -35,7 +35,9 @@ public class Certificate extends Audited implements Serializable, DtoMapper<Disc
 	@Column(name="discovery_id")
 	private Long discoveryId;
 	
-	@Column(name = "meta")
+	// TEXT in the schema; the length keeps generated DDL (tests) in step with it, as
+	// serialized metadata comfortably exceeds the 255-char default.
+	@Column(name = "meta", length = 1000000)
 	private String meta;
 	
 	@Override

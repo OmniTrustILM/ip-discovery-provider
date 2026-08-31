@@ -18,6 +18,15 @@ import java.util.regex.Pattern;
 public class DiscoverIpHandler {
     private static final Logger logger = LoggerFactory.getLogger(DiscoverIpHandler.class);
 
+    // Compiled once. getIpHostnameUrls and getPorts match these per input element, and a subnet or
+    // port-range scan runs the loop thousands of times, so compiling inside it was pure overhead.
+    private static final Pattern HOSTNAME_PATTERN = Pattern.compile(AttributeServiceImpl.HOSTNAME_VALIDATION_REGEX);
+    private static final Pattern IP_ADDRESS_PATTERN = Pattern.compile(AttributeServiceImpl.IP_ADDRESS_VALIDATION_REGEX);
+    private static final Pattern IP_ADDRESS_RANGE_PATTERN = Pattern.compile(AttributeServiceImpl.IP_ADDRESS_RANGE_VALIDATION_REGEX);
+    private static final Pattern IP_SUBNET_PATTERN = Pattern.compile(AttributeServiceImpl.IP_SUBNET_VALIDATION_REGEX);
+    private static final Pattern PORT_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_VALIDATION_REGEX);
+    private static final Pattern PORT_RANGE_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_RANGE_VALIDATION_REGEX);
+
     private DiscoverIpHandler() {
         throw new IllegalStateException("Utility Class");
     }
@@ -48,14 +57,14 @@ public class DiscoverIpHandler {
         Set<String> ipsHostname = new HashSet<>();
 
         for (String indIp : ips.split(",")) {
-            if (Pattern.compile(AttributeServiceImpl.HOSTNAME_VALIDATION_REGEX).matcher(indIp).matches()) {
+            if (HOSTNAME_PATTERN.matcher(indIp).matches()) {
                 ipsHostname.add(indIp);
-            } else if (Pattern.compile(AttributeServiceImpl.IP_ADDRESS_VALIDATION_REGEX).matcher(indIp).matches()) {
+            } else if (IP_ADDRESS_PATTERN.matcher(indIp).matches()) {
                 ipsHostname.add(indIp);
-            } else if (Pattern.compile(AttributeServiceImpl.IP_ADDRESS_RANGE_VALIDATION_REGEX).matcher(indIp).matches()) {
+            } else if (IP_ADDRESS_RANGE_PATTERN.matcher(indIp).matches()) {
                 String[] ipRange = indIp.split("-");
                 ipsHostname.addAll(getIpRange(ipRange[0], ipRange[1]));
-            } else if (Pattern.compile(AttributeServiceImpl.IP_SUBNET_VALIDATION_REGEX).matcher(indIp).matches()) {
+            } else if (IP_SUBNET_PATTERN.matcher(indIp).matches()) {
                 SubnetUtils utils = new SubnetUtils(indIp);
                 ipsHostname.addAll(Arrays.asList(utils.getInfo().getAllAddresses()));
             } else {
@@ -106,9 +115,9 @@ public class DiscoverIpHandler {
             }
         } else {
             for (String port : ports.split(",")) {
-                if (Pattern.compile(AttributeServiceImpl.PORT_VALIDATION_REGEX).matcher(port).matches()) {
+                if (PORT_PATTERN.matcher(port).matches()) {
                     portNumbers.add(port);
-                } else if (Pattern.compile(AttributeServiceImpl.PORT_RANGE_VALIDATION_REGEX).matcher(port).matches()) {
+                } else if (PORT_RANGE_PATTERN.matcher(port).matches()) {
                     String[] portRange = port.split("-");
                     int start = Integer.parseInt(portRange[0]);
                     int end = Integer.parseInt(portRange[1]);
