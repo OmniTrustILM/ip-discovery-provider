@@ -110,8 +110,7 @@ public class DiscoverIpHandler {
         Set<String> portNumbers = new HashSet<>();
 
         if (Boolean.TRUE.equals(allPorts)) {
-            // 1..65535 inclusive: port 0 is not a scannable port and is rejected by
-            // PORT_VALIDATION_REGEX, while 65535 is valid and was previously skipped.
+            // 1..65535 inclusive: port 0 is not scannable and PORT_VALIDATION_REGEX rejects it.
             for (int i = 1; i <= 65535; i++) {
                 portNumbers.add(String.valueOf(i));
             }

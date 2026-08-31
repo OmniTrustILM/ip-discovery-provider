@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.io.IOException;
+
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.security.auth.x500.X500Principal;
@@ -35,6 +37,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
@@ -64,7 +67,8 @@ class DiscoveryScanIntegrationTest {
 
     private static HttpsServer server;
     private static int port;
-    private static int closedPort;
+    private static ServerSocket refusingEndpoint;
+    private static int refusingPort;
     private static X509Certificate servedCertificate;
 
     @Autowired
@@ -115,17 +119,31 @@ class DiscoveryScanIntegrationTest {
         server.start();
         port = server.getAddress().getPort();
 
-        // Bind and release a second port so it is known to have been free, rather than assuming
-        // the neighbour of an OS-assigned ephemeral port happens to be closed.
-        try (ServerSocket reserved = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
-            closedPort = reserved.getLocalPort();
-        }
+        // A second endpoint that accepts and immediately closes, so the TLS handshake cannot
+        // complete and the URL is counted as failed. Held open for the class lifetime: releasing
+        // a port and hoping it stays free leaves a window for another process to bind it.
+        refusingEndpoint = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"));
+        refusingPort = refusingEndpoint.getLocalPort();
+        Thread accepter = new Thread(() -> {
+            while (!refusingEndpoint.isClosed()) {
+                try (Socket ignored = refusingEndpoint.accept()) {
+                    // closing the accepted socket is the point
+                } catch (IOException e) {
+                    return;
+                }
+            }
+        }, "refusing-endpoint");
+        accepter.setDaemon(true);
+        accepter.start();
     }
 
     @AfterAll
-    static void stopTlsEndpoint() {
+    static void stopTlsEndpoint() throws IOException {
         if (server != null) {
             server.stop(0);
+        }
+        if (refusingEndpoint != null) {
+            refusingEndpoint.close();
         }
     }
 
@@ -241,12 +259,12 @@ class DiscoveryScanIntegrationTest {
                 .findFirst()
                 .ifPresent(a -> ((RequestAttributeV2) a)
                         .setContent(List.<BaseAttributeContentV2<?>>of(
-                                new StringAttributeContentV2(port + "," + closedPort))));
+                                new StringAttributeContentV2(port + "," + refusingPort))));
 
         DiscoveryHistory history = runScanToCompletion(request);
 
-        // One port serves TLS and the other is closed, so the scan completes with a partial result.
-        // Note this pins COMPLETED for a scan with failed URLs -- see the discussion on PR #96.
+        // One port serves TLS, the other refuses the handshake. A scan finishes COMPLETED even
+        // when some URLs failed; the failures surface only in the discovery metadata.
         Assertions.assertEquals(DiscoveryStatus.COMPLETED, history.getStatus());
         Assertions.assertEquals(1, certificateRepository.findByDiscoveryId(history.getId()).size());
     }
