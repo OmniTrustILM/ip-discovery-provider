@@ -33,7 +33,23 @@ public class InsecureSSL
             }
     };
 
-    // Hostname verifier for which ALL hosts valid
+    /**
+     * Accepts every hostname, deliberately.
+     *
+     * <p>This connector scans bare IP addresses and hostnames to collect whatever certificate the
+     * endpoint presents. The names will frequently not match by design -- scanning 10.0.0.7 and
+     * receiving a certificate for an unrelated CN is the normal case, and is exactly the finding
+     * the scan exists to report. Enforcing verification here would reject those endpoints and stop
+     * the connector doing its job.
+     *
+     * <p>The certificate is never trusted for anything: it is read, encoded and handed to Core.
+     * No request carries credentials over these connections, and this class is used only by
+     * ConnectionServiceImpl for outbound scanning -- never for an authenticated or inbound channel.
+     *
+     * <p>CodeQL raises java/unsafe-hostname-verification here. It is a true positive as a pattern
+     * and is dismissed as won't-fix on that basis, not because the finding is wrong. Do not
+     * "repair" this by adding verification.
+     */
     private static final HostnameVerifier allHostsValid = (hostname, session) -> true;
 
     public static HttpsURLConnection openInsecureConnection(URL url) throws IOException, NoSuchAlgorithmException, KeyManagementException {
