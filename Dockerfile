@@ -6,9 +6,11 @@ COPY pom.xml /home/app
 COPY settings.xml /root/.m2/settings.xml
 COPY docker /home/app/docker
 
-# Tests are not run here: the build and build_pr workflows already run the full suite once on
-# native hardware, and this stage is built once per target architecture.
-RUN mvn -f /home/app/pom.xml clean package -DskipTests
+# Tests run here on purpose. publish_docker.yaml and build.yml are independent workflows on the
+# same main/tag push, so nothing else stops a failing build from being published: skipping tests
+# here would let the publish job push and sign an image while the test workflow is still running
+# or already red. This stage is the only thing gating that.
+RUN mvn -f /home/app/pom.xml clean package
 
 # Optimize stage
 FROM eclipse-temurin:21-jdk-alpine AS optimize
