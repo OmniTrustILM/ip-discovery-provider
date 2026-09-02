@@ -1,7 +1,7 @@
 package db.migration;
 
-import com.czertainly.core.util.V2AttributeMigrationUtils;
-import com.czertainly.discovery.ip.enums.JavaMigrationChecksums;
+import com.otilm.core.util.V2AttributeMigrationUtils;
+import com.otilm.discovery.ip.enums.JavaMigrationChecksums;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
 
