@@ -28,14 +28,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.awaitility.Awaitility.await;
 
 /**
- * The scan submits every target to a virtual-thread executor but waits for each batch before submitting the next, and
- * that wait is the only thing bounding how much work is in flight at once.
- *
- * <p>
- * It used to be incidental: the target set was materialised up front, so memory was dominated by the URL list and the
- * batching read as transaction plumbing. Now that targets are enumerated by index there is no materialised list, and a
- * scan of a large range would submit millions of tasks at once if the batching were dropped — which is exactly what
- * removing the (inert) per-batch transaction around it invites. This test makes the bound explicit.
+ * The scan waits for each batch before submitting the next, and that wait is the only thing bounding work in flight.
+ * Since targets are enumerated by index rather than materialised, nothing else would stop a large range from
+ * submitting millions of tasks at once. This test makes the bound explicit.
  */
 @SpringBootTest
 class DiscoveryScanBoundednessTest {
@@ -61,7 +56,7 @@ class DiscoveryScanBoundednessTest {
         }
     }
 
-    /** Records how many probes are in flight at once, then fails the probe — no certificate is the point. */
+    /** Records peak in-flight probes, then fails: no certificate is the point. */
     static class CountingConnectionService implements ConnectionService {
 
         private final AtomicInteger inFlight = new AtomicInteger();

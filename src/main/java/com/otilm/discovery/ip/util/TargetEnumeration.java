@@ -16,32 +16,20 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 /**
- * The scan's targets, addressed by index rather than held in memory.
+ * The scan's targets, addressed by index rather than held in memory: only the parsed host blocks and the port list are
+ * kept, and the nth target is computed arithmetically. A {@code /24} on all ports is 16,645,890 targets.
  *
  * <p>
- * A scan spec is a pure function of its attributes, so the target set never needs storing — but it must not be
- * materialised either. The set-based path this replaces built every {@code https://host:port} string before sending a
- * packet: a single {@code /24} on all ports is 254 x 65535 = 16,645,890 URLs, on the order of 1.6 GB, allocated during
- * attribute validation and again at scan start. This class holds only the parsed host blocks and the port list, and
- * computes the nth target arithmetically.
+ * <b>The order is frozen.</b> A discovery v2 checkpoint is an index into this enumeration, so a resume against a
+ * different order would resume at the wrong target. {@link #digest()} detects that and refuses the resume.
  *
  * <p>
- * <b>The order is frozen.</b> A discovery v2 checkpoint is an index into this enumeration, so a run that stopped and
- * later resumed against a different order would resume at the wrong target. {@link #digest()} is what detects that: it
- * covers the normalised spec and {@link #ENUMERATION_VERSION}, a stopped run carries it, and a mismatch refuses the
- * resume rather than silently scanning the wrong addresses. Change the order only by bumping the version deliberately.
- *
- * <p>
- * Addresses are IPv4 throughout, which the validation regexes already require, so an address fits in a {@code long} and
- * blocks merge with plain interval arithmetic.
+ * Addresses are IPv4 throughout, which the validation regexes require, so an address fits in a {@code long} and blocks
+ * merge with interval arithmetic.
  */
 public final class TargetEnumeration {
 
-    /**
-     * Bump only with a deliberate, breaking change to the enumeration order. Every stopped run in the field carries a
-     * digest computed over this value and will refuse to resume once it changes — which is the intended behaviour, not
-     * a reason to avoid bumping when the order really does change.
-     */
+    /** Bump only with a deliberate change to the enumeration order: every stopped run in the field then refuses to resume. */
     private static final String ENUMERATION_VERSION = "1";
 
     private static final Pattern HOSTNAME_PATTERN = Pattern.compile(AttributeServiceImpl.HOSTNAME_VALIDATION_REGEX);
@@ -87,8 +75,7 @@ public final class TargetEnumeration {
     }
 
     /**
-     * Parses a scan spec. Rejects the same inputs the set-based path rejected, and with the same exception types, since
-     * attribute validation depends on them.
+     * Parses a scan spec. The exception types are what attribute validation depends on.
      *
      * @throws ValidationException if a host entry is not an address, range, subnet or hostname
      * @throws IllegalArgumentException if a port entry is not a port or a port range
@@ -123,10 +110,7 @@ public final class TargetEnumeration {
         return "https://" + hostAt(index / ports.length) + ":" + ports[(int) (index % ports.length)];
     }
 
-    /**
-     * Identity of the scan and its enumeration order — see the class note. Stable across processes and connector
-     * versions until {@link #ENUMERATION_VERSION} changes.
-     */
+    /** Identity of the scan and its enumeration order, stable until {@link #ENUMERATION_VERSION} changes. */
     public String digest() {
         return digest;
     }
@@ -146,9 +130,8 @@ public final class TargetEnumeration {
     private static void parseHosts(String hostSpec, Set<String> names, List<long[]> blocks) {
         for (String entry : hostSpec.split(",")) {
             if (HOSTNAME_PATTERN.matcher(entry).matches()) {
-                // Case-folded: DNS names are case-insensitive, so two casings are the same scan and must agree on
-                // both enumeration order and digest, which is what this class promises of every other spelling
-                // difference. Left verbatim they sorted as distinct entries and hashed differently.
+                // Case-folded: DNS names are case-insensitive, so two casings are one scan and must agree on
+                // order and digest.
                 names.add(entry.toLowerCase(Locale.ROOT));
             } else if (IP_ADDRESS_PATTERN.matcher(entry).matches()) {
                 long address = toLong(entry);
@@ -168,9 +151,8 @@ public final class TargetEnumeration {
     }
 
     /**
-     * Adds a CIDR block's <em>usable</em> addresses — network and broadcast excluded, matching the set-based path's
-     * {@code SubnetUtils.getInfo().getAllAddresses()}. A {@code /31} or {@code /32} therefore contributes nothing,
-     * which is what that path did too.
+     * Adds a CIDR block's <em>usable</em> addresses, network and broadcast excluded. A {@code /31} or {@code /32}
+     * therefore contributes nothing.
      */
     private static void addSubnet(String entry, List<long[]> blocks) {
         String[] parts = entry.split("/");
@@ -186,8 +168,8 @@ public final class TargetEnumeration {
     }
 
     /**
-     * Merges overlapping and adjacent blocks. Without this an overlapping spec — a subnet plus an address inside it —
-     * would enumerate the overlap twice, scanning it twice and inflating every count derived from {@link #size()}.
+     * Merges overlapping and adjacent blocks, so an overlapping spec — a subnet plus an address inside it — is not
+     * scanned twice and does not inflate {@link #size()}.
      */
     private static long[][] merge(List<long[]> blocks) {
         if (blocks.isEmpty()) {
@@ -242,10 +224,7 @@ public final class TargetEnumeration {
         return parsed.stream().mapToInt(Integer::intValue).toArray();
     }
 
-    /**
-     * Hashes the normalised spec: entries in canonical order, blocks merged, ports as ranges. Two spellings of one scan
-     * therefore agree, and the value does not depend on the order the user happened to type.
-     */
+    /** Hashes the normalised spec — canonical order, blocks merged, ports as ranges — so two spellings of one scan agree. */
     private static String digestOf(List<String> hostnames, long[] low, long[] high, int[] ports) {
         StringBuilder canonical = new StringBuilder(ENUMERATION_VERSION).append("|H:");
         canonical.append(String.join(",", hostnames)).append("|A:");
@@ -291,13 +270,9 @@ public final class TargetEnumeration {
      * Packs a dotted quad into a {@code long}, rejecting an octet outside 0-255.
      *
      * <p>
-     * The range check is not belt and braces. {@code IP_SUBNET_VALIDATION_REGEX} bounds each octet only to one-to-three
-     * digits — unlike the address and range regexes, which bound the value — and it makes the {@code /prefix} optional,
-     * so both {@code 999.1.1.0/24} and a bare {@code 10.0.0.999} reach this method. Packed unchecked, the surplus bits
-     * bleed across the byte boundary: {@code 999.1.1.0/24} enumerates {@code 231.1.1.0/24}, a different network
-     * entirely, and the bare quad becomes a {@code /32} contributing nothing at all. The set-based path this replaced
-     * rejected both, because {@code SubnetUtils} range-checks internally — so without this the change would swap a loud
-     * refusal for a silent wrong scan.
+     * The check is load-bearing: {@code IP_SUBNET_VALIDATION_REGEX} bounds octets only to one-to-three digits and makes
+     * the prefix optional, so {@code 999.1.1.0/24} reaches here and unchecked would bleed across the byte boundary into
+     * {@code 231.1.1.0/24} — a different network.
      */
     private static long toLong(String dottedQuad) {
         String[] octets = dottedQuad.split("\\.");
@@ -322,12 +297,8 @@ public final class TargetEnumeration {
     }
 
     /**
-     * Parses a host spec for its exceptions alone, materialising nothing.
-     *
-     * <p>
-     * Attribute validation runs on every discovery creation and only needs to know the spec is well formed. Validating
-     * by building the address set — which is what it used to do — allocated the whole scan up front on the user's
-     * request thread, so a {@code /8} could exhaust the heap before any scan was even started.
+     * Parses a host spec for its exceptions alone, materialising nothing. Attribute validation runs on every discovery
+     * creation, on the request thread, and only needs to know the spec is well formed.
      *
      * @throws ValidationException if a host entry is not an address, range, subnet or hostname
      */

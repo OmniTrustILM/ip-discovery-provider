@@ -58,9 +58,8 @@ public class DiscoveryHistoryServiceImpl implements DiscoveryHistoryService {
 
 	@Override
 	public void deleteHistory(DiscoveryHistory history) {
-		// By id, not by the entity. Its certificates are removed by a bulk statement that clears the persistence
-		// context, so the caller's entity is detached by the time this runs and delete(entity) would merge it back
-		// -- reloading a row purely to delete it.
+		// By id, not by the entity: the bulk certificate delete clears the persistence context, so delete(entity)
+		// would merge a detached entity back just to remove it.
 		discoveryHistoryRepository.deleteById(history.getId());
 	}
 }

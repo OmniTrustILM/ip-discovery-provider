@@ -36,19 +36,14 @@ public class ConnectionServiceImpl implements ConnectionService {
 
         logger.info("Requesting the certificate from URL {}", url);
         URL destination = new URL(url);
-        // Deliberately no catch that normalises the failure. This caught ConnectException and rethrew
-        // SocketTimeoutException with the cause discarded, so a closed port and an unreachable host were
-        // recorded identically and the stack was gone. Both are IOException, which this method already
-        // declares, so letting them through costs nothing and keeps the two findings distinguishable.
+        // No catch normalising the failure: a refused connection and an unanswered one are different findings,
+        // and both are IOException, which this method already declares.
         HttpsURLConnection conn = InsecureSSL.openInsecureConnection(destination);
         logger.debug("Connection object framed for the URL {}", url);
         conn.setConnectTimeout(connectTimeoutMs);
-        // Both bounds are needed, and only the first was ever set. A target that completes the TCP
-        // handshake and then says nothing -- a tarpit, or a firewall that swallows the TLS handshake --
-        // is not a connect failure, so the connect timeout never fires. Without a read timeout the
-        // default is 0, meaning wait forever, and one such host holds a scanner thread for the life of
-        // the process. The scan is a sweep of mostly-empty address space, so giving up early is the
-        // correct trade, and both values are configurable for the deployments where it is not.
+        // Both bounds are needed. A target that completes the TCP handshake and then stalls is not a connect
+        // failure, so without a read timeout it holds a scanner thread forever. A sweep of mostly-empty address
+        // space should give up early; both values are configurable where it should not.
         conn.setReadTimeout(readTimeoutMs);
         conn.connect();
         logger.debug("Connected to {}", url);

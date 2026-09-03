@@ -7,18 +7,14 @@ import org.junit.jupiter.api.Test;
 import java.util.HashSet;
 import java.util.Set;
 
-/**
- * The enumeration is addressed by index and its order is frozen: a discovery v2 checkpoint is an index into it, so a
- * scan that resumes after the order changed would resume at the wrong target. These tests are what freeze it.
- */
+/** The enumeration's order is frozen because a discovery v2 checkpoint is an index into it. These tests freeze it. */
 class TargetEnumerationTest {
 
     // --- it does not materialise ---
 
     @Test
     void sizesAWholeSubnetOnEveryPortWithoutMaterialisingIt() {
-        // 254 usable hosts (network and broadcast excluded, as SubnetUtils does) x 65535 ports.
-        // The v1 path built this as a Set<String> of URLs -- roughly 1.6 GB -- before sending a packet.
+        // 254 usable hosts (network and broadcast excluded) x 65535 ports.
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.0/24", "443", true);
 
         Assertions.assertEquals(254L * 65535L, targets.size());
@@ -47,9 +43,8 @@ class TargetEnumerationTest {
     // --- the order is frozen ---
 
     /**
-     * Pinned deliberately. This value is the identity of the enumeration order: a stopped discovery v2 run carries it
-     * in its checkpoint and refuses to resume when it no longer matches. Changing it is a breaking act that invalidates
-     * every stopped run in the field, so change it only together with a deliberate enumeration-version bump.
+     * Pinned deliberately: a stopped discovery v2 run carries this in its checkpoint and refuses to resume when it no
+     * longer matches. Changing it invalidates every stopped run in the field, so change it only with a version bump.
      */
     private static final String GOLDEN_DIGEST_FOR_10_0_0_0_30_ON_80_443 =
             "7c072d0d9a892c9f5812716a991f3f339b4abb8860773f7a581b6bfa6cf95f20";
@@ -101,8 +96,7 @@ class TargetEnumerationTest {
 
     @Test
     void countsAnOverlappingSpecOnce() {
-        // A subnet and an address inside it are one scan, not one and a bit. Left unmerged this would
-        // scan the overlap twice and inflate every count derived from size().
+        // A subnet and an address inside it are one scan; unmerged, the overlap would be scanned twice.
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.0/24,10.0.0.5", "443", false);
 
         Assertions.assertEquals(254L, targets.size());
@@ -146,10 +140,8 @@ class TargetEnumerationTest {
     // --- octet bounds ---
 
     /**
-     * The subnet regex bounds octets only to one-to-three digits, unlike the address and range regexes, so an
-     * out-of-range octet reaches the parser. Packed unchecked it bleeds across byte boundaries and yields an address
-     * nobody asked for: 999.1.1.0/24 became 231.1.1.0/24, a different network entirely. The set-based path this
-     * replaces rejected the same input, because Apache Commons SubnetUtils range-checks internally.
+     * The subnet regex bounds octets only to one-to-three digits, so an out-of-range octet reaches the parser and
+     * unchecked yields a different network: 999.1.1.0/24 enumerated 231.1.1.0/24.
      */
     @Test
     void rejectsASubnetWithAnOutOfRangeOctet() {
@@ -160,10 +152,7 @@ class TargetEnumerationTest {
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("300.1.1.0/24", "443", false));
     }
 
-    /**
-     * The same regex makes the prefix optional, so a bare out-of-range quad reaches the subnet branch too. Unchecked it
-     * was treated as a /32 and contributed nothing at all -- the target silently vanished rather than being refused.
-     */
+    /** The prefix is optional in that regex, so a bare out-of-range quad reaches the subnet branch and silently vanishes. */
     @Test
     void rejectsABareAddressWithAnOutOfRangeOctet() {
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("10.0.0.999", "443", false));
@@ -177,10 +166,7 @@ class TargetEnumerationTest {
 
     // --- hostname casing ---
 
-    /**
-     * DNS names are case-insensitive, so two casings are the same scan and must agree on both order and digest -- the
-     * class promises exactly that of every other spelling difference.
-     */
+    /** DNS names are case-insensitive, so two casings are one scan and must agree on order and digest. */
     @Test
     void treatsHostnameCasingAsTheSameScan() {
         TargetEnumeration upper = TargetEnumeration.of("EXAMPLE.com,Other.Example.COM", "443", false);

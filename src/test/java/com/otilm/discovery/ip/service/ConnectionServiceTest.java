@@ -29,15 +29,14 @@ public class ConnectionServiceTest{
     }
 
     /**
-     * A refused connection and an unanswered one are different findings and must stay distinguishable. Reporting a
-     * refusal as a timeout -- which this did, by catching ConnectException and rethrowing SocketTimeoutException with
-     * the cause discarded -- leaves an operator unable to tell a closed port from an unreachable host.
+     * A refused connection and an unanswered one are different findings: reporting a refusal as a timeout leaves an
+     * operator unable to tell a closed port from an unreachable host.
      */
     @Test
     void reportsARefusedConnectionAsRefusedRatherThanTimedOut() throws IOException {
         int refusedPort;
         try (ServerSocket closed = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
-            // Bind then release, so the port is deterministically nobody's rather than merely probably free.
+            // Bind then release, so the port is deterministically nobody's.
             refusedPort = closed.getLocalPort();
         }
 
@@ -46,17 +45,13 @@ public class ConnectionServiceTest{
                         () -> connectionService.getCertificates("https://127.0.0.1:" + refusedPort));
     }
 
-    /**
-     * A target that completes the TCP handshake and then says nothing must be abandoned, not waited on forever.
-     * Only the connect timeout was ever set, so the TLS handshake and the certificate read ran with the default
-     * read timeout of 0 -- infinite -- and one such host held a scanner thread for the life of the process.
-     */
+    /** A target that completes the TCP handshake and then stalls must be abandoned, not waited on forever. */
     @Test
     void abandonsATargetThatAcceptsAndThenStalls() throws IOException {
         try (ServerSocket stalling = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
             Thread accepter = new Thread(() -> {
                 try (Socket held = stalling.accept()) {
-                    // Accept, then never speak: the shape of a tarpit, and of a firewall that swallows the handshake.
+                    // Accept, then never speak: a tarpit, or a firewall that swallows the handshake.
                     Thread.sleep(Duration.ofMinutes(1));
                 } catch (Exception e) {
                     Thread.currentThread().interrupt();

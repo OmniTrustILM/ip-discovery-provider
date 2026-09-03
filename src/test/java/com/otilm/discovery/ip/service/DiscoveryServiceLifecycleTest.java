@@ -135,10 +135,7 @@ class DiscoveryServiceLifecycleTest {
         Assertions.assertThrows(NotFoundException.class, () -> discoveryHistoryService.getHistoryByUuid(history.getUuid()));
     }
 
-    /**
-     * The delete is a bulk statement keyed on the discovery id, so a wrong predicate would take every certificate in
-     * the table with it and the single-discovery test above would still pass.
-     */
+    /** The delete is a bulk statement, so a wrong predicate would take the whole table and the test above still pass. */
     @Test
     void deletingADiscoveryLeavesOtherDiscoveriesCertificatesAlone() throws Exception {
         storeCertificate("ZGlzY292ZXJ5LW9uZQ==");

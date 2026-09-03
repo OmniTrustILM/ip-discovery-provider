@@ -21,9 +21,9 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long>{
 	long countByDiscoveryId(Long discoveryId);
 
 	/**
-	 * Written out rather than derived: a derived {@code deleteBy} loads every matching entity and removes them one at a
-	 * time, which is the cost this replaces. {@code clearAutomatically} is required because a bulk statement bypasses
-	 * the persistence context, so without it a read in the same transaction would still see the deleted rows.
+	 * Written out rather than derived, because a derived {@code deleteBy} loads every matching entity first.
+	 * {@code clearAutomatically} is required: a bulk statement bypasses the persistence context, so without it a read
+	 * in the same transaction would still see the deleted rows.
 	 */
 	@Modifying(clearAutomatically = true)
 	@Query("DELETE FROM Certificate c WHERE c.discoveryId = :discoveryId")

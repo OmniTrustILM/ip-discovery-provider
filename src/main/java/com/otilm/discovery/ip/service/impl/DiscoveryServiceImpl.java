@@ -77,8 +77,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         dto.setName(history.getName());
         dto.setStatus(history.getStatus());
         dto.setMeta(AttributeDefinitionUtils.deserialize(history.getMeta(), MetadataAttribute.class));
-        // A count, not a list: this loaded the full base64 content of every certificate the discovery ever
-        // found, on every read of the detail, to produce a number.
+        // A count, not a list: the full base64 content of every certificate is not needed to produce a number.
         dto.setTotalCertificatesDiscovered((int) certificateRepository.countByDiscoveryId(history.getId()));
         if (history.getStatus() == DiscoveryStatus.IN_PROGRESS) {
             dto.setCertificateData(new ArrayList<>());
@@ -159,16 +158,11 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     }
 
     /**
-     * Waits for the batch in flight, then clears it so the next one can be submitted.
+     * Waits for the batch in flight, then clears it so the next can be submitted.
      *
      * <p>
-     * This wait is the scan's only backpressure. Targets are enumerated by index rather than materialised, so nothing
-     * else bounds submission: without it a large range would hand millions of tasks to the executor at once. It used to
-     * also commit a transaction opened around the loop, which covered no operations at all --
-     * {@code TransactionSynchronizationManager} holds its resources in non-inheritable thread locals and the executor
-     * has no {@code TaskDecorator}, so the worker threads never joined it and each certificate save committed on its
-     * own. Reading as per-batch atomicity while providing none is worse than not claiming it, so the transaction is
-     * gone and the wait -- which was doing the real work -- stays.
+     * This wait is the scan's only backpressure: targets are enumerated by index rather than materialised, so nothing
+     * else bounds submission and a large range would otherwise hand millions of tasks to the executor at once.
      */
     private void awaitBatch(List<Future<?>> futures, String discoveryName) throws ExecutionException, InterruptedException {
         logger.debug("Waiting for {} URL discovery tasks for discovery {}", futures.size(), discoveryName);
@@ -220,10 +214,8 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         totalAttributeProperties.setVisible(true);
 
         totalAttribute.setProperties(totalAttributeProperties);
-        // The target count is a long -- a /16 on all ports is 4.29 billion -- but this metadata attribute has
-        // been INTEGER since v1 and its type is part of that wire shape. Clamp rather than widen: a scan large
-        // enough to saturate the clamp is one no operator reads an exact total off, and the reference is the
-        // v1 shape, not the number.
+        // The count is a long -- a /16 on all ports is 4.29 billion -- but this attribute has been INTEGER since
+        // v1 and its type is part of that wire shape, so clamp rather than widen.
         int reportableTotal = (int) Math.min(totalUrls, Integer.MAX_VALUE);
         totalAttribute
                 .setContent(List.of(new IntegerAttributeContentV2(Long.toString(totalUrls), reportableTotal)));
