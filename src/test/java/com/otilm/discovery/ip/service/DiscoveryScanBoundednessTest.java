@@ -64,6 +64,7 @@ class DiscoveryScanBoundednessTest {
         private final AtomicInteger completed = new AtomicInteger();
 
         @Override
+        @SuppressWarnings("java:S2925") // the probe's duration is what makes concurrency observable at all
         public com.otilm.discovery.ip.dto.ConnectionResponse getCertificates(String url) throws IOException {
             int now = inFlight.incrementAndGet();
             peakInFlight.accumulateAndGet(now, Math::max);

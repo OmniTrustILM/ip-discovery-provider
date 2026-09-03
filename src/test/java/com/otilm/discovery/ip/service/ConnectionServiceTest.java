@@ -46,6 +46,7 @@ public class ConnectionServiceTest{
     }
 
     @Test
+    @SuppressWarnings("java:S2925") // the endpoint sleeps to hold its socket open; that is the target being tested
     void abandonsATargetThatAcceptsAndThenStalls() throws IOException {
         try (ServerSocket stalling = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
             Thread accepter = new Thread(() -> {

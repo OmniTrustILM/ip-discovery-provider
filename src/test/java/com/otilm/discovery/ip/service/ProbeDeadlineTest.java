@@ -75,6 +75,7 @@ class ProbeDeadlineTest {
      * Sends a valid TLS record header claiming a large handshake fragment, then drips a byte at a time. Every read the
      * client makes succeeds, so the read timeout never fires while the record never completes.
      */
+    @SuppressWarnings("java:S2925") // the drip interval is the simulated server, not test synchronisation
     private static void startTarpit(ServerSocket tarpit) {
         Thread accepter = new Thread(() -> {
             try (Socket held = tarpit.accept(); OutputStream out = held.getOutputStream()) {

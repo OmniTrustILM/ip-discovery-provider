@@ -8,7 +8,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -50,7 +49,6 @@ public final class TargetEnumeration {
 
     /** Merged, ascending, inclusive. Parallel arrays rather than objects: there are few blocks and many addresses. */
     private final long[] blockLow;
-    private final long[] blockHigh;
 
     /** Addresses enumerated before each block, so a block is found by binary search rather than by walking. */
     private final long[] blockStart;
@@ -62,7 +60,7 @@ public final class TargetEnumeration {
     private TargetEnumeration(List<String> hostnames, long[] blockLow, long[] blockHigh, int[] ports, String digest) {
         this.hostnames = hostnames;
         this.blockLow = blockLow;
-        this.blockHigh = blockHigh;
+        // blockHigh is not kept: only the block sizes are needed, and they are folded into blockStart below.
         this.ports = ports;
         this.digest = digest;
         this.blockStart = new long[blockLow.length];
@@ -257,7 +255,8 @@ public final class TargetEnumeration {
     /** Collapses a sorted port list into ranges, so an all-ports scan canonicalises to {@code 1-65535}. */
     private static String asRanges(int[] ports) {
         StringBuilder ranges = new StringBuilder();
-        for (int i = 0; i < ports.length;) {
+        int i = 0;
+        while (i < ports.length) {
             int from = i;
             while (i + 1 < ports.length && ports[i + 1] == ports[i] + 1) {
                 i++;
@@ -300,6 +299,28 @@ public final class TargetEnumeration {
     private static String toDottedQuad(long address) {
         return ((address >> 24) & 0xFF) + "." + ((address >> 16) & 0xFF) + "." + ((address >> 8) & 0xFF) + "."
                 + (address & 0xFF);
+    }
+
+    /**
+     * Parses a port spec for its exceptions alone.
+     *
+     * <p>
+     * Rethrown as {@link ValidationException}, which maps to 422; the {@link IllegalArgumentException} the parser
+     * raises would surface as a 500. Nothing else checks port semantics — the published regex accepts a descending
+     * range — so without this a bad spec is accepted at creation and fails only once the scan runs.
+     *
+     * @throws ValidationException if a port entry is not a port or a well-ordered port range
+     */
+    public static void validatePortSpec(String portSpec, Boolean allPorts) {
+        if (Boolean.TRUE.equals(allPorts)) {
+            // The list is not read in that case, so an unusable one is not a reason to refuse the run.
+            return;
+        }
+        try {
+            parsePorts(portSpec, false);
+        } catch (IllegalArgumentException e) {
+            throw new ValidationException(e.getMessage());
+        }
     }
 
     /**

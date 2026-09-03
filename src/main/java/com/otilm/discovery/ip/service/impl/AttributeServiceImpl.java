@@ -270,6 +270,9 @@ public class AttributeServiceImpl implements AttributeService {
         AttributeDefinitionUtils.validateAttributes(getAttributes(kind), attributes);
 
         validateIpHostnameDataAttributeContentValue(attributes);
+        TargetEnumeration
+                .validatePortSpec(getPortDataAttributeContentValue(attributes),
+                        getAllPortsDataAttributeContentValue(attributes));
 
         return true;
     }

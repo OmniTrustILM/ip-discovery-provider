@@ -126,6 +126,24 @@ class AttributeServiceImplTest {
         Assertions.assertThrows(ValidationException.class, () -> attributeService.validateAttributes(KIND, attributes));
     }
 
+    /**
+     * The port regex accepts a descending range, so nothing before this rejected one: the discovery was created and
+     * only the asynchronous scan failed, hours later. Validation and execution should agree.
+     */
+    @Test
+    void rejectsAReversedPortRangeOnValidation() {
+        List<RequestAttribute> attributes = new ArrayList<>(List.of(ip("10.0.0.1"), port("443-80"), allPorts(false)));
+
+        Assertions.assertThrows(ValidationException.class, () -> attributeService.validateAttributes(KIND, attributes));
+    }
+
+    @Test
+    void ignoresThePortListWhenEveryPortIsRequested() {
+        List<RequestAttribute> attributes = new ArrayList<>(List.of(ip("10.0.0.1"), port("443-80"), allPorts(true)));
+
+        Assertions.assertTrue(attributeService.validateAttributes(KIND, attributes));
+    }
+
     // --- content accessors ---
 
     @Test
