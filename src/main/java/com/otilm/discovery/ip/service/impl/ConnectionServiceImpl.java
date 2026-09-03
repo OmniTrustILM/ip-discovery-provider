@@ -48,8 +48,7 @@ public class ConnectionServiceImpl implements ConnectionService {
         // is not a connect failure, so the connect timeout never fires. Without a read timeout the
         // default is 0, meaning wait forever, and one such host holds a scanner thread for the life of
         // the process. The scan is a sweep of mostly-empty address space, so giving up early is the
-        // correct trade; both values are configurable, and whether these defaults are right is part of
-        // the failure-classification review in #103.
+        // correct trade, and both values are configurable for the deployments where it is not.
         conn.setReadTimeout(readTimeoutMs);
         conn.connect();
         logger.debug("Connected to {}", url);

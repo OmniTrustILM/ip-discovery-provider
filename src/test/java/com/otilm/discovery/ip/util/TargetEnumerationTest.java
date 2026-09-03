@@ -143,6 +143,59 @@ class TargetEnumerationTest {
         Assertions.assertEquals(legacy, enumerated);
     }
 
+    // --- octet bounds ---
+
+    /**
+     * The subnet regex bounds octets only to one-to-three digits, unlike the address and range regexes, so an
+     * out-of-range octet reaches the parser. Packed unchecked it bleeds across byte boundaries and yields an address
+     * nobody asked for: 999.1.1.0/24 became 231.1.1.0/24, a different network entirely. The set-based path this
+     * replaces rejected the same input, because Apache Commons SubnetUtils range-checks internally.
+     */
+    @Test
+    void rejectsASubnetWithAnOutOfRangeOctet() {
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> TargetEnumeration.of("999.999.999.999/24", "443", false));
+        Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("999.1.1.0/24", "443", false));
+        Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("300.1.1.0/24", "443", false));
+    }
+
+    /**
+     * The same regex makes the prefix optional, so a bare out-of-range quad reaches the subnet branch too. Unchecked it
+     * was treated as a /32 and contributed nothing at all -- the target silently vanished rather than being refused.
+     */
+    @Test
+    void rejectsABareAddressWithAnOutOfRangeOctet() {
+        Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("10.0.0.999", "443", false));
+    }
+
+    @Test
+    void acceptsTheBoundaryOctets() {
+        Assertions.assertEquals(1L, TargetEnumeration.of("255.255.255.255", "443", false).size());
+        Assertions.assertEquals(254L, TargetEnumeration.of("0.0.0.0/24", "443", false).size());
+    }
+
+    // --- hostname casing ---
+
+    /**
+     * DNS names are case-insensitive, so two casings are the same scan and must agree on both order and digest -- the
+     * class promises exactly that of every other spelling difference.
+     */
+    @Test
+    void treatsHostnameCasingAsTheSameScan() {
+        TargetEnumeration upper = TargetEnumeration.of("EXAMPLE.com,Other.Example.COM", "443", false);
+        TargetEnumeration lower = TargetEnumeration.of("example.com,other.example.com", "443", false);
+
+        Assertions.assertEquals(lower.digest(), upper.digest());
+        Assertions.assertEquals(lower.size(), upper.size());
+        Assertions.assertEquals(lower.target(0), upper.target(0));
+    }
+
+    @Test
+    void collapsesTheSameHostnameSpelledTwoWays() {
+        Assertions.assertEquals(1L, TargetEnumeration.of("Example.COM,example.com", "443", false).size());
+    }
+
     // --- validation ---
 
     @Test

@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
@@ -52,6 +53,7 @@ public final class TargetEnumeration {
     private static final Pattern PORT_RANGE_PATTERN =
             Pattern.compile(AttributeServiceImpl.PORT_RANGE_VALIDATION_REGEX);
 
+    private static final int MAX_OCTET = 255;
     private static final int MIN_PORT = 1;
     private static final int MAX_PORT = 65535;
 
@@ -144,7 +146,10 @@ public final class TargetEnumeration {
     private static void parseHosts(String hostSpec, Set<String> names, List<long[]> blocks) {
         for (String entry : hostSpec.split(",")) {
             if (HOSTNAME_PATTERN.matcher(entry).matches()) {
-                names.add(entry);
+                // Case-folded: DNS names are case-insensitive, so two casings are the same scan and must agree on
+                // both enumeration order and digest, which is what this class promises of every other spelling
+                // difference. Left verbatim they sorted as distinct entries and hashed differently.
+                names.add(entry.toLowerCase(Locale.ROOT));
             } else if (IP_ADDRESS_PATTERN.matcher(entry).matches()) {
                 long address = toLong(entry);
                 blocks.add(new long[] {address, address});
@@ -282,11 +287,31 @@ public final class TargetEnumeration {
         return ranges.toString();
     }
 
+    /**
+     * Packs a dotted quad into a {@code long}, rejecting an octet outside 0-255.
+     *
+     * <p>
+     * The range check is not belt and braces. {@code IP_SUBNET_VALIDATION_REGEX} bounds each octet only to one-to-three
+     * digits — unlike the address and range regexes, which bound the value — and it makes the {@code /prefix} optional,
+     * so both {@code 999.1.1.0/24} and a bare {@code 10.0.0.999} reach this method. Packed unchecked, the surplus bits
+     * bleed across the byte boundary: {@code 999.1.1.0/24} enumerates {@code 231.1.1.0/24}, a different network
+     * entirely, and the bare quad becomes a {@code /32} contributing nothing at all. The set-based path this replaced
+     * rejected both, because {@code SubnetUtils} range-checks internally — so without this the change would swap a loud
+     * refusal for a silent wrong scan.
+     */
     private static long toLong(String dottedQuad) {
         String[] octets = dottedQuad.split("\\.");
+        if (octets.length != 4) {
+            throw new ValidationException("Invalid IP address: " + dottedQuad);
+        }
         long value = 0;
         for (String octet : octets) {
-            value = (value << 8) | Integer.parseInt(octet);
+            int parsed = Integer.parseInt(octet);
+            if (parsed > MAX_OCTET) {
+                throw new ValidationException(
+                        "Invalid IP address, octet " + parsed + " is outside 0-" + MAX_OCTET + ": " + dottedQuad);
+            }
+            value = (value << 8) | parsed;
         }
         return value;
     }
