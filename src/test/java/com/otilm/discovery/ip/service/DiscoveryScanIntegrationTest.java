@@ -165,15 +165,16 @@ class DiscoveryScanIntegrationTest {
                     new com.otilm.discovery.ip.service.impl.ConnectionServiceImpl(300, 2000, 1 + attempt % 40);
             try {
                 Assertions.assertNotNull(racing.getCertificates(url).getCertificates());
-            } catch (java.net.SocketTimeoutException deadline) {
+            } catch (Exception thrown) {
+                // Succeeding is fine and timing out on the deadline is fine. Anything else means the watchdog
+                // disconnected a connection the probe had already claimed.
                 Assertions
-                        .assertTrue(deadline.getMessage().contains("deadline"),
+                        .assertInstanceOf(java.net.SocketTimeoutException.class, thrown,
+                                "attempt " + attempt + " failed with neither success nor a deadline timeout");
+                Assertions
+                        .assertTrue(thrown.getMessage().contains("deadline"),
                                 "attempt " + attempt + " timed out without naming the deadline: "
-                                        + deadline.getMessage());
-            } catch (Exception unexpected) {
-                Assertions
-                        .fail("attempt " + attempt + " failed with neither success nor a deadline timeout: "
-                                + unexpected.getClass().getName() + ": " + unexpected.getMessage(), unexpected);
+                                        + thrown.getMessage());
             }
         }
     }
