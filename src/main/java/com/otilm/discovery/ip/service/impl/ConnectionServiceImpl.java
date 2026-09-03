@@ -71,6 +71,11 @@ public class ConnectionServiceImpl implements ConnectionService {
         return scheduler;
     }
 
+    private SocketTimeoutException deadlineExceeded(String url) {
+        return new SocketTimeoutException(
+                "Probe of " + url + " exceeded its total deadline of " + totalTimeoutMs + " ms");
+    }
+
     @Override
     public ConnectionResponse getCertificates(String url) throws IOException, NoSuchAlgorithmException, KeyManagementException {
 
@@ -90,23 +95,31 @@ public class ConnectionServiceImpl implements ConnectionService {
         // that window keeps the handshake alive forever, and the scan waits on every future in its batch, so one
         // such target stops the whole scan rather than its own probe. The deadline covers connect() alone because
         // that is where the handshake happens; everything after it reads the completed session.
-        AtomicBoolean deadlineExpired = new AtomicBoolean();
+        // Claimed by whoever gets there first: the watchdog disconnecting, or the probe completing its handshake.
+        // cancel() is not enough on its own -- it does not stop a callback that has already begun -- so without
+        // this handoff a deadline landing in the instant connect() returns would disconnect while the certificates
+        // are read, surfacing a completed handshake as an unrelated socket error outside the block that
+        // translates it.
+        AtomicBoolean claimed = new AtomicBoolean();
         ScheduledFuture<?> deadline = DEADLINES.schedule(() -> {
-            deadlineExpired.set(true);
-            conn.disconnect();
+            if (claimed.compareAndSet(false, true)) {
+                conn.disconnect();
+            }
         }, totalTimeoutMs, TimeUnit.MILLISECONDS);
         try {
             conn.connect();
         } catch (IOException e) {
             // Closing the socket surfaces as an arbitrary socket error, which would blur a deliberate abandonment
             // with a genuine one. Reported as a timeout, since that is what it is.
-            if (deadlineExpired.get()) {
-                throw new SocketTimeoutException(
-                        "Probe of " + url + " exceeded its total deadline of " + totalTimeoutMs + " ms");
+            if (!claimed.compareAndSet(false, true)) {
+                throw deadlineExceeded(url);
             }
             throw e;
         } finally {
             deadline.cancel(false);
+        }
+        if (!claimed.compareAndSet(false, true)) {
+            throw deadlineExceeded(url);
         }
         logger.debug("Connected to {}", url);
         X509Certificate[] certs = (X509Certificate[]) conn.getServerCertificates();

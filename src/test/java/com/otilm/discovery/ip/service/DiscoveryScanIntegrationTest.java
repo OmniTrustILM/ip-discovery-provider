@@ -147,6 +147,37 @@ class DiscoveryScanIntegrationTest {
         }
     }
 
+    /**
+     * The watchdog and the probe race for the same connection whenever a deadline lands near the handshake
+     * completing, and cancel() does not stop a callback that has already begun. Whichever wins, the outcome must be
+     * one of exactly two things: a probe that succeeded, or a timeout that says it was the deadline. An unrelated
+     * socket error means the watchdog disconnected a connection the probe had already claimed.
+     */
+    @Test
+    void aDeadlineRacingACompletedHandshakeNeverProducesAnUnrelatedError() {
+        String url = "https://localhost:" + port;
+
+        // Swept rather than fixed: the window is the instant between connect() returning and the probe claiming
+        // the connection, so a deadline has to land near the handshake's own duration to fall inside it. One
+        // fixed value almost always fires early and never exercises the race at all.
+        for (int attempt = 0; attempt < 200; attempt++) {
+            ConnectionService racing =
+                    new com.otilm.discovery.ip.service.impl.ConnectionServiceImpl(300, 2000, 1 + attempt % 40);
+            try {
+                Assertions.assertNotNull(racing.getCertificates(url).getCertificates());
+            } catch (java.net.SocketTimeoutException deadline) {
+                Assertions
+                        .assertTrue(deadline.getMessage().contains("deadline"),
+                                "attempt " + attempt + " timed out without naming the deadline: "
+                                        + deadline.getMessage());
+            } catch (Exception unexpected) {
+                Assertions
+                        .fail("attempt " + attempt + " failed with neither success nor a deadline timeout: "
+                                + unexpected.getClass().getName() + ": " + unexpected.getMessage(), unexpected);
+            }
+        }
+    }
+
     private static RequestAttributeV2 attribute(String uuid, String name, AttributeContentType type,
             BaseAttributeContentV2<?> content) {
         RequestAttributeV2 attribute = new RequestAttributeV2();
