@@ -30,11 +30,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.io.IOException;
 import java.security.KeyManagementException;
@@ -54,16 +51,9 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     private static final Logger logger = LoggerFactory.getLogger(DiscoveryServiceImpl.class);
 
-    private PlatformTransactionManager transactionManager;
-
     private ConnectionService connectionService;
     private CertificateRepository certificateRepository;
     private DiscoveryHistoryService discoveryHistoryService;
-
-    @Autowired
-    public void setTransactionManager(PlatformTransactionManager transactionManager) {
-        this.transactionManager = transactionManager;
-    }
 
     @Autowired
     public void setConnectionService(ConnectionService connectionService) {
@@ -130,11 +120,9 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         Set<String> uniqueCerts = Collections.synchronizedSet(new HashSet<>()); // Thread-safe set
 
         boolean failed = false;
-        TransactionStatus status = null;
         List<Future<?>> futures = new ArrayList<>();
         int maxThreads = AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(request.getAttributes());
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            status = transactionManager.getTransaction(new DefaultTransactionDefinition());
             for (long i = 0; i < targets.size(); i++) {
                 String url = targets.target(i);
                 futures.add(executor.submit(() -> {
@@ -149,11 +137,11 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 }));
 
                 if (futures.size() == maxThreads) {
-                    status = commitDiscoveredCertsBatch(status, futures, history.getName());
+                    awaitBatch(futures, history.getName());
                 }
             }
             if (!futures.isEmpty()) {
-                status = commitDiscoveredCertsBatch(status, futures, history.getName());
+                awaitBatch(futures, history.getName());
             }
         } catch (Exception e) {
             failed = true;
@@ -162,29 +150,33 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 Thread.currentThread().interrupt();
             }
         } finally {
-            if (status == null || status.isCompleted()) {
-                status = transactionManager.getTransaction(new DefaultTransactionDefinition());
-            }
-
             logger.info("Discovery {} has total of {} certificates, {} unique, from {} sources", request.getName(), foundCertsCount.get(), uniqueCerts.size(), targets.size());
             history.setStatus(failed ? DiscoveryStatus.FAILED : DiscoveryStatus.COMPLETED);
             history.setMeta(AttributeDefinitionUtils.serialize(getDiscoveryMetadata(targets.size(), successUrlCount.get(), failedUrlCount.get())));
             discoveryHistoryService.setHistory(history);
             logger.info("Discovery Completed. Name of the discovery is {}", request.getName());
-            transactionManager.commit(status);
         }
     }
 
-    private TransactionStatus commitDiscoveredCertsBatch(TransactionStatus status, List<Future<?>> futures, String discoveryName) throws ExecutionException, InterruptedException {
+    /**
+     * Waits for the batch in flight, then clears it so the next one can be submitted.
+     *
+     * <p>
+     * This wait is the scan's only backpressure. Targets are enumerated by index rather than materialised, so nothing
+     * else bounds submission: without it a large range would hand millions of tasks to the executor at once. It used to
+     * also commit a transaction opened around the loop, which covered no operations at all --
+     * {@code TransactionSynchronizationManager} holds its resources in non-inheritable thread locals and the executor
+     * has no {@code TaskDecorator}, so the worker threads never joined it and each certificate save committed on its
+     * own. Reading as per-batch atomicity while providing none is worse than not claiming it, so the transaction is
+     * gone and the wait -- which was doing the real work -- stays.
+     */
+    private void awaitBatch(List<Future<?>> futures, String discoveryName) throws ExecutionException, InterruptedException {
         logger.debug("Waiting for {} URL discovery tasks for discovery {}", futures.size(), discoveryName);
         for (Future<?> future : futures) {
             future.get();
         }
         logger.debug("{} URL discovery tasks for discovery {} finished", futures.size(), discoveryName);
         futures.clear();
-        transactionManager.commit(status);
-
-        return transactionManager.getTransaction(new DefaultTransactionDefinition());
     }
 
     private void processCertificatesForUrl(String url, Long historyId, Set<String> uniqueCerts, AtomicInteger foundCertsCount) throws IOException, NoSuchAlgorithmException, KeyManagementException, CertificateEncodingException {
