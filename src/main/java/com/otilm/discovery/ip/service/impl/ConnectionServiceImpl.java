@@ -10,8 +10,6 @@ import org.springframework.stereotype.Service;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.io.IOException;
-import java.net.ConnectException;
-import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
@@ -38,29 +36,28 @@ public class ConnectionServiceImpl implements ConnectionService {
 
         logger.info("Requesting the certificate from URL {}", url);
         URL destination = new URL(url);
-        try {
-            HttpsURLConnection conn = InsecureSSL.openInsecureConnection(destination);
-            logger.debug("Connection object framed for the URL {}", url);
-            conn.setConnectTimeout(connectTimeoutMs);
-            // Both bounds are needed, and only the first was ever set. A target that completes the TCP
-            // handshake and then says nothing -- a tarpit, or a firewall that swallows the TLS handshake --
-            // is not a connect failure, so the connect timeout never fires. Without a read timeout the
-            // default is 0, meaning wait forever, and one such host holds a scanner thread for the life of
-            // the process. The scan is a sweep of mostly-empty address space, so giving up early is the
-            // correct trade; both values are configurable, and whether these defaults are right is part of
-            // the failure-classification review in #103.
-            conn.setReadTimeout(readTimeoutMs);
-            conn.connect();
-            logger.debug("Connected to {}", url);
-            X509Certificate[] certs = (X509Certificate[]) conn.getServerCertificates();
-            String cipher = conn.getCipherSuite().toString();
-            conn.disconnect();
-            logger.debug("Connection to {} terminated", url);
-            return new ConnectionResponse(cipher, certs);
-        } catch (ConnectException e) {
-            throw new SocketTimeoutException("Unable to connect to URL");
-        }
-
+        // Deliberately no catch that normalises the failure. This caught ConnectException and rethrew
+        // SocketTimeoutException with the cause discarded, so a closed port and an unreachable host were
+        // recorded identically and the stack was gone. Both are IOException, which this method already
+        // declares, so letting them through costs nothing and keeps the two findings distinguishable.
+        HttpsURLConnection conn = InsecureSSL.openInsecureConnection(destination);
+        logger.debug("Connection object framed for the URL {}", url);
+        conn.setConnectTimeout(connectTimeoutMs);
+        // Both bounds are needed, and only the first was ever set. A target that completes the TCP
+        // handshake and then says nothing -- a tarpit, or a firewall that swallows the TLS handshake --
+        // is not a connect failure, so the connect timeout never fires. Without a read timeout the
+        // default is 0, meaning wait forever, and one such host holds a scanner thread for the life of
+        // the process. The scan is a sweep of mostly-empty address space, so giving up early is the
+        // correct trade; both values are configurable, and whether these defaults are right is part of
+        // the failure-classification review in #103.
+        conn.setReadTimeout(readTimeoutMs);
+        conn.connect();
+        logger.debug("Connected to {}", url);
+        X509Certificate[] certs = (X509Certificate[]) conn.getServerCertificates();
+        String cipher = conn.getCipherSuite().toString();
+        conn.disconnect();
+        logger.debug("Connection to {} terminated", url);
+        return new ConnectionResponse(cipher, certs);
     }
 
 

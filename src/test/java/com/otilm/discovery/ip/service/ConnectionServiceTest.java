@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -27,9 +28,22 @@ public class ConnectionServiceTest{
         Assertions.assertNotNull(certificates);
     }
 
+    /**
+     * A refused connection and an unanswered one are different findings and must stay distinguishable. Reporting a
+     * refusal as a timeout -- which this did, by catching ConnectException and rethrowing SocketTimeoutException with
+     * the cause discarded -- leaves an operator unable to tell a closed port from an unreachable host.
+     */
     @Test
-    public void testConnection_Fail() {
-        Assertions.assertThrows(SocketTimeoutException.class, ()-> connectionService.getCertificates("https://localhost:124"));
+    void reportsARefusedConnectionAsRefusedRatherThanTimedOut() throws IOException {
+        int refusedPort;
+        try (ServerSocket closed = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
+            // Bind then release, so the port is deterministically nobody's rather than merely probably free.
+            refusedPort = closed.getLocalPort();
+        }
+
+        Assertions
+                .assertThrows(ConnectException.class,
+                        () -> connectionService.getCertificates("https://127.0.0.1:" + refusedPort));
     }
 
     /**
