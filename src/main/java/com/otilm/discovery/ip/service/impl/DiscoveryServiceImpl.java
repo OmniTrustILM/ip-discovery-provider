@@ -77,8 +77,9 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         dto.setName(history.getName());
         dto.setStatus(history.getStatus());
         dto.setMeta(AttributeDefinitionUtils.deserialize(history.getMeta(), MetadataAttribute.class));
-        int totalCertificateSize = certificateRepository.findByDiscoveryId(history.getId()).size();
-        dto.setTotalCertificatesDiscovered(totalCertificateSize);
+        // A count, not a list: this loaded the full base64 content of every certificate the discovery ever
+        // found, on every read of the detail, to produce a number.
+        dto.setTotalCertificatesDiscovered((int) certificateRepository.countByDiscoveryId(history.getId()));
         if (history.getStatus() == DiscoveryStatus.IN_PROGRESS) {
             dto.setCertificateData(new ArrayList<>());
             dto.setTotalCertificatesDiscovered(0);
@@ -92,8 +93,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     @Override
     public void deleteDiscovery(String uuid) throws NotFoundException {
         DiscoveryHistory discoveryHistory = discoveryHistoryService.getHistoryByUuid(uuid);
-        List<Certificate> certificates = certificateRepository.findByDiscoveryId(discoveryHistory.getId());
-        certificateRepository.deleteAll(certificates);
+        certificateRepository.deleteAllByDiscoveryId(discoveryHistory.getId());
         discoveryHistoryService.deleteHistory(discoveryHistory);
     }
 
