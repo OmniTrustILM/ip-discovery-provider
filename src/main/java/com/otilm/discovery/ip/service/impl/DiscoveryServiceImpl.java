@@ -21,6 +21,7 @@ import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.DiscoveryHistoryService;
 import com.otilm.discovery.ip.service.DiscoveryService;
 import com.otilm.discovery.ip.util.DiscoverIpHandler;
+import com.otilm.discovery.ip.util.TargetEnumeration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -122,7 +123,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     private void discoverCertificatesInternal(DiscoveryRequestDto request, DiscoveryHistory history) {
         logger.info("Discovery initiated for the request with name {}", request.getName());
-        Set<String> urls = DiscoverIpHandler.getAllIp(request);
+        TargetEnumeration targets = DiscoverIpHandler.getTargets(request);
         AtomicInteger successUrlCount = new AtomicInteger(0);
         AtomicInteger failedUrlCount = new AtomicInteger(0);
         AtomicInteger foundCertsCount = new AtomicInteger(0);
@@ -134,7 +135,8 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         int maxThreads = AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(request.getAttributes());
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             status = transactionManager.getTransaction(new DefaultTransactionDefinition());
-            for (String url : urls) {
+            for (long i = 0; i < targets.size(); i++) {
+                String url = targets.target(i);
                 futures.add(executor.submit(() -> {
                     logger.debug("Discovering certificate for {}", url);
                     try {
@@ -164,9 +166,9 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 status = transactionManager.getTransaction(new DefaultTransactionDefinition());
             }
 
-            logger.info("Discovery {} has total of {} certificates, {} unique, from {} sources", request.getName(), foundCertsCount.get(), uniqueCerts.size(), urls.size());
+            logger.info("Discovery {} has total of {} certificates, {} unique, from {} sources", request.getName(), foundCertsCount.get(), uniqueCerts.size(), targets.size());
             history.setStatus(failed ? DiscoveryStatus.FAILED : DiscoveryStatus.COMPLETED);
-            history.setMeta(AttributeDefinitionUtils.serialize(getDiscoveryMetadata(urls.size(), successUrlCount.get(), failedUrlCount.get())));
+            history.setMeta(AttributeDefinitionUtils.serialize(getDiscoveryMetadata(targets.size(), successUrlCount.get(), failedUrlCount.get())));
             discoveryHistoryService.setHistory(history);
             logger.info("Discovery Completed. Name of the discovery is {}", request.getName());
             transactionManager.commit(status);
@@ -210,7 +212,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         }
     }
 
-    private List<MetadataAttributeV2> getDiscoveryMetadata(Integer totalUrls, Integer successUrls, Integer failedUrls) {
+    private List<MetadataAttributeV2> getDiscoveryMetadata(long totalUrls, Integer successUrls, Integer failedUrls) {
         List<MetadataAttributeV2> attributes = new ArrayList<>();
 
         //Total URL
@@ -226,7 +228,13 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         totalAttributeProperties.setVisible(true);
 
         totalAttribute.setProperties(totalAttributeProperties);
-        totalAttribute.setContent(List.of(new IntegerAttributeContentV2(totalUrls.toString(), totalUrls)));
+        // The target count is a long -- a /16 on all ports is 4.29 billion -- but this metadata attribute has
+        // been INTEGER since v1 and its type is part of that wire shape. Clamp rather than widen: a scan large
+        // enough to saturate the clamp is one no operator reads an exact total off, and the reference is the
+        // v1 shape, not the number.
+        int reportableTotal = (int) Math.min(totalUrls, Integer.MAX_VALUE);
+        totalAttribute
+                .setContent(List.of(new IntegerAttributeContentV2(Long.toString(totalUrls), reportableTotal)));
         attributes.add(totalAttribute);
 
         //Success URL

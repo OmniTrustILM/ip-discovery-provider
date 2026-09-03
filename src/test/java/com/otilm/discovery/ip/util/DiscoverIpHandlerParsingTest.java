@@ -164,11 +164,16 @@ class DiscoverIpHandlerParsingTest {
         Assertions.assertTrue(DiscoverIpHandler.buildUrls(Set.of("10.0.0.1"), Set.of()).isEmpty());
     }
 
-    // --- getAllIp ---
+    // --- getTargets ---
 
     @Test
     void expandsAWholeRequestIntoUrls() {
-        Set<String> urls = DiscoverIpHandler.getAllIp(request("10.9.9.1-10.9.9.2", "443,8443", false));
+        TargetEnumeration targets = DiscoverIpHandler.getTargets(request("10.9.9.1-10.9.9.2", "443,8443", false));
+
+        Set<String> urls = new java.util.HashSet<>();
+        for (long i = 0; i < targets.size(); i++) {
+            urls.add(targets.target(i));
+        }
 
         Assertions.assertEquals(Set.of(
                 "https://10.9.9.1:443", "https://10.9.9.1:8443",
@@ -180,7 +185,7 @@ class DiscoverIpHandlerParsingTest {
         DiscoveryRequestDto request = request("10.0.0.1", "443", false);
         request.setKind("Nonsense");
 
-        Assertions.assertThrows(ValidationException.class, () -> DiscoverIpHandler.getAllIp(request));
+        Assertions.assertThrows(ValidationException.class, () -> DiscoverIpHandler.getTargets(request));
     }
 
     @Test

@@ -20,7 +20,7 @@ import com.otilm.api.model.common.attribute.v2.content.TextAttributeContentV2;
 import com.otilm.core.util.AttributeDefinitionUtils;
 import com.otilm.discovery.ip.enums.DiscoveryKind;
 import com.otilm.discovery.ip.service.AttributeService;
-import com.otilm.discovery.ip.util.DiscoverIpHandler;
+import com.otilm.discovery.ip.util.TargetEnumeration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -287,7 +287,7 @@ public class AttributeServiceImpl implements AttributeService {
             throw new ValidationException("Discovery IPs/Hostname is required, but was not provided");
         }
 
-        DiscoverIpHandler.getIpHostnameUrls(content.getData());
+        TargetEnumeration.validateHostSpec(content.getData());
     }
 
     public static String getDiscoveryIpDataAttributeContentValue(List<RequestAttribute> attributes) {
