@@ -5,6 +5,7 @@ import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.InsecureSSL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -23,6 +24,15 @@ public class ConnectionServiceImpl implements ConnectionService {
 
     private static final Logger logger = LoggerFactory.getLogger(ConnectionServiceImpl.class);
 
+    private final int connectTimeoutMs;
+    private final int readTimeoutMs;
+
+    public ConnectionServiceImpl(@Value("${discovery.probe.connect-timeout-ms:300}") int connectTimeoutMs,
+            @Value("${discovery.probe.read-timeout-ms:2000}") int readTimeoutMs) {
+        this.connectTimeoutMs = connectTimeoutMs;
+        this.readTimeoutMs = readTimeoutMs;
+    }
+
     @Override
     public ConnectionResponse getCertificates(String url) throws IOException, NoSuchAlgorithmException, KeyManagementException {
 
@@ -31,7 +41,15 @@ public class ConnectionServiceImpl implements ConnectionService {
         try {
             HttpsURLConnection conn = InsecureSSL.openInsecureConnection(destination);
             logger.debug("Connection object framed for the URL {}", url);
-            conn.setConnectTimeout(300);
+            conn.setConnectTimeout(connectTimeoutMs);
+            // Both bounds are needed, and only the first was ever set. A target that completes the TCP
+            // handshake and then says nothing -- a tarpit, or a firewall that swallows the TLS handshake --
+            // is not a connect failure, so the connect timeout never fires. Without a read timeout the
+            // default is 0, meaning wait forever, and one such host holds a scanner thread for the life of
+            // the process. The scan is a sweep of mostly-empty address space, so giving up early is the
+            // correct trade; both values are configurable, and whether these defaults are right is part of
+            // the failure-classification review in #103.
+            conn.setReadTimeout(readTimeoutMs);
             conn.connect();
             logger.debug("Connected to {}", url);
             X509Certificate[] certs = (X509Certificate[]) conn.getServerCertificates();

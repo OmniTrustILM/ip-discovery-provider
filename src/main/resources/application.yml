@@ -1,6 +1,12 @@
 discovery:
   portOptions: No, Yes
   supportedTypes: IP, Range, Subnet
+  probe:
+    # Bounds on a single target probe. connect-timeout-ms bounds the TCP handshake; read-timeout-ms bounds
+    # the TLS handshake and the certificate read, which are otherwise unbounded and can hold a scanner
+    # thread indefinitely against a host that accepts and then stalls.
+    connect-timeout-ms: ${DISCOVERY_PROBE_CONNECT_TIMEOUT_MS:300}
+    read-timeout-ms: ${DISCOVERY_PROBE_READ_TIMEOUT_MS:2000}
 server:
   port: ${PORT:8080}
 spring:
