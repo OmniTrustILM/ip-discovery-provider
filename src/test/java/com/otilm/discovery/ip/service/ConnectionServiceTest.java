@@ -36,7 +36,7 @@ public class ConnectionServiceTest{
     void reportsARefusedConnectionAsRefusedRatherThanTimedOut() throws IOException {
         int refusedPort;
         try (ServerSocket closed = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
-            // Bind then release, so the port is deterministically nobody's.
+            // Bind then release: nothing else in this JVM binds, so reassignment before the probe is remote.
             refusedPort = closed.getLocalPort();
         }
 
@@ -45,7 +45,6 @@ public class ConnectionServiceTest{
                         () -> connectionService.getCertificates("https://127.0.0.1:" + refusedPort));
     }
 
-    /** A target that completes the TCP handshake and then stalls must be abandoned, not waited on forever. */
     @Test
     void abandonsATargetThatAcceptsAndThenStalls() throws IOException {
         try (ServerSocket stalling = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {

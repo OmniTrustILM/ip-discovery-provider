@@ -43,7 +43,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 @Transactional
@@ -113,9 +113,11 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     private void discoverCertificatesInternal(DiscoveryRequestDto request, DiscoveryHistory history) {
         logger.info("Discovery initiated for the request with name {}", request.getName());
         TargetEnumeration targets = DiscoverIpHandler.getTargets(request);
-        AtomicInteger successUrlCount = new AtomicInteger(0);
-        AtomicInteger failedUrlCount = new AtomicInteger(0);
-        AtomicInteger foundCertsCount = new AtomicInteger(0);
+        // Long, like the target count they are drawn from: an int wraps past 2.1 billion and would report a
+        // negative total for a scan the enumeration can now express.
+        AtomicLong successUrlCount = new AtomicLong(0);
+        AtomicLong failedUrlCount = new AtomicLong(0);
+        AtomicLong foundCertsCount = new AtomicLong(0);
         Set<String> uniqueCerts = Collections.synchronizedSet(new HashSet<>()); // Thread-safe set
 
         boolean failed = false;
@@ -173,7 +175,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         futures.clear();
     }
 
-    private void processCertificatesForUrl(String url, Long historyId, Set<String> uniqueCerts, AtomicInteger foundCertsCount) throws IOException, NoSuchAlgorithmException, KeyManagementException, CertificateEncodingException {
+    private void processCertificatesForUrl(String url, Long historyId, Set<String> uniqueCerts, AtomicLong foundCertsCount) throws IOException, NoSuchAlgorithmException, KeyManagementException, CertificateEncodingException {
         ConnectionResponse connection = connectionService.getCertificates(url);
         logger.debug("Connection to the url success. Certificates obtained");
         X509Certificate[] certificates = connection.getCertificates();
@@ -198,7 +200,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         }
     }
 
-    private List<MetadataAttributeV2> getDiscoveryMetadata(long totalUrls, Integer successUrls, Integer failedUrls) {
+    private List<MetadataAttributeV2> getDiscoveryMetadata(long totalUrls, long successUrls, long failedUrls) {
         List<MetadataAttributeV2> attributes = new ArrayList<>();
 
         //Total URL
@@ -214,11 +216,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         totalAttributeProperties.setVisible(true);
 
         totalAttribute.setProperties(totalAttributeProperties);
-        // The count is a long -- a /16 on all ports is 4.29 billion -- but this attribute has been INTEGER since
-        // v1 and its type is part of that wire shape, so clamp rather than widen.
-        int reportableTotal = (int) Math.min(totalUrls, Integer.MAX_VALUE);
-        totalAttribute
-                .setContent(List.of(new IntegerAttributeContentV2(Long.toString(totalUrls), reportableTotal)));
+        totalAttribute.setContent(reportableCount(totalUrls));
         attributes.add(totalAttribute);
 
         //Success URL
@@ -234,7 +232,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         successAttributeProperties.setVisible(true);
 
         successAttribute.setProperties(successAttributeProperties);
-        successAttribute.setContent(List.of(new IntegerAttributeContentV2(successUrls.toString(), successUrls)));
+        successAttribute.setContent(reportableCount(successUrls));
         attributes.add(successAttribute);
 
         //Failed URL
@@ -250,10 +248,19 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         failedAttributeProperties.setVisible(true);
 
         failedAttribute.setProperties(failedAttributeProperties);
-        failedAttribute.setContent(List.of(new IntegerAttributeContentV2(failedUrls.toString(), failedUrls)));
+        failedAttribute.setContent(reportableCount(failedUrls));
         attributes.add(failedAttribute);
 
         return attributes;
+    }
+
+    /**
+     * These counts are longs -- a /16 on all ports is 4.29 billion targets -- but the attributes have been INTEGER
+     * since v1 and their type is part of that wire shape, so the numeric value is clamped while the reference keeps
+     * the exact figure.
+     */
+    private static List<com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2<?>> reportableCount(long value) {
+        return List.of(new IntegerAttributeContentV2(Long.toString(value), (int) Math.min(value, Integer.MAX_VALUE)));
     }
 
     private List<MetadataAttributeV2> getCertificateMetadata(String discoverySource) {
