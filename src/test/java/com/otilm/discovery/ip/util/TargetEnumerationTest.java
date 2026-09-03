@@ -164,6 +164,26 @@ class TargetEnumerationTest {
         Assertions.assertEquals(254L, TargetEnumeration.of("0.0.0.0/24", "443", false).size());
     }
 
+    /**
+     * The port regex accepts a descending range, and the set-based path produced nothing for one — its loop simply did
+     * not run. Normalising the bounds instead turns a typo into a very large unintended scan: 65535-1 becomes every
+     * port. Reversed IP ranges are a different case and stay normalised, because the old path spanned them.
+     */
+    @Test
+    void rejectsAReversedPortRange() {
+        Assertions
+                .assertThrows(IllegalArgumentException.class,
+                        () -> TargetEnumeration.of("10.0.0.1", "443-80", false));
+        Assertions
+                .assertThrows(IllegalArgumentException.class,
+                        () -> TargetEnumeration.of("10.0.0.1", "65535-1", false));
+    }
+
+    @Test
+    void stillNormalisesAReversedIpRange() {
+        Assertions.assertEquals(5L, TargetEnumeration.of("10.0.0.5-10.0.0.1", "443", false).size());
+    }
+
     // --- hostname casing ---
 
     /** DNS names are case-insensitive, so two casings are one scan and must agree on order and digest. */
