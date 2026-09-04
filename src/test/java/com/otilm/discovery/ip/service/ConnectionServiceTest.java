@@ -28,10 +28,7 @@ public class ConnectionServiceTest{
         Assertions.assertNotNull(certificates);
     }
 
-    /**
-     * A refused connection and an unanswered one are different findings: reporting a refusal as a timeout leaves an
-     * operator unable to tell a closed port from an unreachable host.
-     */
+    /** Pins that a refusal stays distinguishable from a target that never answered. */
     @Test
     void reportsARefusedConnectionAsRefusedRatherThanTimedOut() throws IOException {
         int refusedPort;

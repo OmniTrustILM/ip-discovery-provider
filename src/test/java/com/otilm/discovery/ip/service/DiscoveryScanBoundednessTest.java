@@ -27,11 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
 
-/**
- * The scan waits for each batch before submitting the next, and that wait is the only thing bounding work in flight.
- * Since targets are enumerated by index rather than materialised, nothing else would stop a large range from
- * submitting millions of tasks at once. This test makes the bound explicit.
- */
+/** Makes the batch wait's bound on in-flight probes explicit. */
 @SpringBootTest
 class DiscoveryScanBoundednessTest {
 

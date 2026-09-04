@@ -28,7 +28,6 @@ class TargetEnumerationTest {
     void addressesAnArbitraryIndexInTheMiddle() {
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.0/24", "80,443", false);
 
-        // Host-major: index / portCount selects the host, index % portCount the port.
         Assertions.assertEquals("https://10.0.0.1:80", targets.target(0));
         Assertions.assertEquals("https://10.0.0.1:443", targets.target(1));
         Assertions.assertEquals("https://10.0.0.2:80", targets.target(2));
@@ -99,7 +98,6 @@ class TargetEnumerationTest {
 
     @Test
     void normalisesTheSpecSoTwoSpellingsOfOneScanAgree() {
-        // Order of entries, and a subnet against the range it denotes, are the same scan.
         Assertions
                 .assertEquals(TargetEnumeration.of("10.0.0.1,10.0.0.2", "443", false).digest(),
                         TargetEnumeration.of("10.0.0.2,10.0.0.1", "443", false).digest());
@@ -124,7 +122,6 @@ class TargetEnumerationTest {
 
     @Test
     void countsAnOverlappingSpecOnce() {
-        // A subnet and an address inside it are one scan; unmerged, the overlap would be scanned twice.
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.0/24,10.0.0.5", "443", false);
 
         Assertions.assertEquals(254L, targets.size());
@@ -167,10 +164,7 @@ class TargetEnumerationTest {
 
     // --- octet bounds ---
 
-    /**
-     * The subnet regex bounds octets only to one-to-three digits, so an out-of-range octet reaches the parser and
-     * unchecked yields a different network: 999.1.1.0/24 enumerated 231.1.1.0/24.
-     */
+    /** Pins that an out-of-range octet is refused rather than enumerated as a different network. */
     @Test
     void rejectsASubnetWithAnOutOfRangeOctet() {
         Assertions
@@ -180,22 +174,13 @@ class TargetEnumerationTest {
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("300.1.1.0/24", "443", false));
     }
 
-    /** The prefix is optional in that regex, so a bare out-of-range quad reaches the subnet branch and silently vanishes. */
+    /** Pins the prefix-less form, which reaches the subnet branch rather than the address one. */
     @Test
     void rejectsABareAddressWithAnOutOfRangeOctet() {
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("10.0.0.999", "443", false));
     }
 
-    /**
-     * A leading zero fails the address regex, whose octet alternation has no branch for one, but passes the subnet
-     * regex, whose prefix is optional. It therefore reached addSubnet as a /32 and contributed no addresses at all:
-     * validation accepted the spec, size() was zero, and the run completed having probed nothing.
-     *
-     * <p>
-     * Rejected rather than read as decimal. The old path rejected it too -- SubnetUtils will not parse an address
-     * without a prefix -- and the notation is ambiguous: 010 is octal 8 to inet_aton and decimal 10 to
-     * Integer.parseInt, so accepting it means scanning a host the operator may not have named.
-     */
+    /** Pins that a leading zero is refused, in both the bare and the prefixed spelling. */
     @Test
     void rejectsAnAddressWithLeadingZeros() {
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("010.0.0.1", "443", false));
@@ -213,11 +198,7 @@ class TargetEnumerationTest {
         Assertions.assertEquals(254L, TargetEnumeration.of("0.0.0.0/24", "443", false).size());
     }
 
-    /**
-     * The port regex accepts a descending range, and the set-based path produced nothing for one — its loop simply did
-     * not run. Normalising the bounds instead turns a typo into a very large unintended scan: 65535-1 becomes every
-     * port. Reversed IP ranges are a different case and stay normalised, because the old path spanned them.
-     */
+    /** Pins that a descending port range is refused, while a descending IP range is still normalised. */
     @Test
     void rejectsAReversedPortRange() {
         Assertions
@@ -235,7 +216,6 @@ class TargetEnumerationTest {
 
     // --- hostname casing ---
 
-    /** DNS names are case-insensitive, so two casings are one scan and must agree on order and digest. */
     @Test
     void treatsHostnameCasingAsTheSameScan() {
         TargetEnumeration upper = TargetEnumeration.of("EXAMPLE.com,Other.Example.COM", "443", false);

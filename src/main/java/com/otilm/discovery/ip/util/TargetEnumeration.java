@@ -212,9 +212,8 @@ public final class TargetEnumeration {
                 String[] bounds = port.split("-");
                 int from = Integer.parseInt(bounds[0]);
                 int to = Integer.parseInt(bounds[1]);
-                // Rejected, not normalised. The regex accepts a descending range and the set-based path produced
-                // nothing for one, so normalising would turn a typo into a very large scan: 65535-1 is every port.
-                // Reversed IP ranges are the opposite case and stay normalised, because that path spanned them.
+                // Rejected, not normalised: the regex accepts a descending range, and normalising one would turn
+                // a typo into a very large scan -- 65535-1 is every port. Reversed IP ranges stay normalised.
                 if (from > to) {
                     throw new IllegalArgumentException("Port range is reversed: " + port);
                 }

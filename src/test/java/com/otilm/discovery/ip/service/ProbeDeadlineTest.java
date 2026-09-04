@@ -13,11 +13,7 @@ import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * A read timeout bounds inactivity between reads, not the probe. A peer that sends a byte just inside that window
- * keeps the handshake alive indefinitely, and because the scan waits for every future in its batch, one such target
- * stops the whole scan rather than just its own probe.
- */
+/** The total deadline, not the read timeout, is what abandons a target that trickles bytes. */
 class ProbeDeadlineTest {
 
     private static final int CONNECT_TIMEOUT_MS = 300;
@@ -55,11 +51,7 @@ class ProbeDeadlineTest {
         }
     }
 
-    /**
-     * Java reads a timeout of zero as "wait forever", so a deployment that sets one to zero silently restores the
-     * unbounded probe these bounds exist to remove. A negative value is rejected per-probe at runtime rather than at
-     * startup. Neither should be reachable.
-     */
+    /** Pins that a non-positive bound is refused at startup rather than accepted and ignored. */
     @Test
     void refusesToStartWithATimeoutThatDisablesTheBound() {
         Assertions
