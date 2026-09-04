@@ -20,7 +20,7 @@ import com.otilm.api.model.common.attribute.v2.content.TextAttributeContentV2;
 import com.otilm.core.util.AttributeDefinitionUtils;
 import com.otilm.discovery.ip.enums.DiscoveryKind;
 import com.otilm.discovery.ip.service.AttributeService;
-import com.otilm.discovery.ip.util.DiscoverIpHandler;
+import com.otilm.discovery.ip.util.TargetEnumeration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -108,6 +108,11 @@ public class AttributeServiceImpl implements AttributeService {
     public static final String DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_LABEL = "Number of parallel executions";
     public static final IntegerAttributeContentV2 DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_DEFAULT_CONTENT =
             new IntegerAttributeContentV2(1);
+    // The published constraint and the bound the scan loop relies on are the same numbers. They were written twice
+    // and only the published one was enforced, which is how a request could ask for a parallelism the loop could
+    // not honour.
+    public static final int PARALLEL_EXECUTIONS_MIN = 1;
+    public static final int PARALLEL_EXECUTIONS_MAX = 100;
 
 
     @Override
@@ -253,11 +258,11 @@ public class AttributeServiceImpl implements AttributeService {
         // create restrictions
         RangeAttributeConstraint rangeAttributeConstraint = new RangeAttributeConstraint();
         RangeAttributeConstraintData rangeData = new RangeAttributeConstraintData();
-        rangeData.setFrom(1);
-        rangeData.setTo(100);
+        rangeData.setFrom(PARALLEL_EXECUTIONS_MIN);
+        rangeData.setTo(PARALLEL_EXECUTIONS_MAX);
         rangeAttributeConstraint.setData(rangeData);
         rangeAttributeConstraint.setDescription("Allowed values for parallel executions");
-        rangeAttributeConstraint.setErrorMessage("Invalid value for parallel executions, it can be between 1 and 100");
+        rangeAttributeConstraint.setErrorMessage(parallelExecutionsOutOfRange());
 
         attribute.setConstraints(List.of(rangeAttributeConstraint));
 
@@ -270,8 +275,31 @@ public class AttributeServiceImpl implements AttributeService {
         AttributeDefinitionUtils.validateAttributes(getAttributes(kind), attributes);
 
         validateIpHostnameDataAttributeContentValue(attributes);
+        TargetEnumeration
+                .validatePortSpec(getPortDataAttributeContentValue(attributes),
+                        getAllPortsDataAttributeContentValue(attributes));
 
         return true;
+    }
+
+    /**
+     * Bounds the parallelism a scan will honour. The published range constraint covers the validation endpoint, but
+     * the discovery endpoint starts a scan without consulting it, and the scan's only backpressure is a batch that
+     * fills to this value — a value it can never reach submits every target at once.
+     *
+     * @return the value, so a caller can read and bound in one expression
+     */
+    public static int validateParallelExecutions(Integer parallelExecutions) {
+        if (parallelExecutions == null || parallelExecutions < PARALLEL_EXECUTIONS_MIN
+                || parallelExecutions > PARALLEL_EXECUTIONS_MAX) {
+            throw new ValidationException(parallelExecutionsOutOfRange());
+        }
+        return parallelExecutions;
+    }
+
+    private static String parallelExecutionsOutOfRange() {
+        return "Invalid value for parallel executions, it can be between " + PARALLEL_EXECUTIONS_MIN + " and "
+                + PARALLEL_EXECUTIONS_MAX;
     }
 
     private void validateKind(String kind) {
@@ -287,7 +315,7 @@ public class AttributeServiceImpl implements AttributeService {
             throw new ValidationException("Discovery IPs/Hostname is required, but was not provided");
         }
 
-        DiscoverIpHandler.getIpHostnameUrls(content.getData());
+        TargetEnumeration.validateHostSpec(content.getData());
     }
 
     public static String getDiscoveryIpDataAttributeContentValue(List<RequestAttribute> attributes) {

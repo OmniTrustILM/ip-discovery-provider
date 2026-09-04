@@ -31,24 +31,22 @@ public class DiscoverIpHandler {
         throw new IllegalStateException("Utility Class");
     }
 
-    public static Set<String> getAllIp(DiscoveryRequestDto request) {
+    /**
+     * The request's scan targets, addressed by index rather than materialised. See {@link TargetEnumeration} for why
+     * the difference matters.
+     */
+    public static TargetEnumeration getTargets(DiscoveryRequestDto request) {
         logger.debug("Discovering the IP");
 
         DiscoveryKind kind = DiscoveryKind.findByCode(request.getKind());
-
-        String ports = AttributeServiceImpl.getPortDataAttributeContentValue(request.getAttributes());
-        Boolean allPorts = AttributeServiceImpl.getAllPortsDataAttributeContentValue(request.getAttributes());
-
-        Set<String> ipsOrHostnames;
-
-        if (kind.equals(DiscoveryKind.IP_Hostname)) {
-            String ips = AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(request.getAttributes());
-            ipsOrHostnames = getIpHostnameUrls(ips);
-        } else {
+        if (!kind.equals(DiscoveryKind.IP_Hostname)) {
             throw new IllegalArgumentException("Unknown kind");
         }
 
-        return buildUrls(ipsOrHostnames, getPorts(ports, allPorts));
+        return TargetEnumeration
+                .of(AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(request.getAttributes()),
+                        AttributeServiceImpl.getPortDataAttributeContentValue(request.getAttributes()),
+                        AttributeServiceImpl.getAllPortsDataAttributeContentValue(request.getAttributes()));
     }
 
     public static Set<String> getIpHostnameUrls(String ips) {

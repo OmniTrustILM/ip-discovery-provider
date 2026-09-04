@@ -1,6 +1,15 @@
 discovery:
   portOptions: No, Yes
   supportedTypes: IP, Range, Subnet
+  probe:
+    # Bounds on a single target probe; all three must be positive, since zero means an unbounded wait.
+    # connect-timeout-ms bounds the TCP handshake. read-timeout-ms bounds inactivity between reads.
+    # total-timeout-ms bounds the whole handshake, which the other two do not: a peer trickling a byte just
+    # inside the read timeout would otherwise hold the probe -- and, through the scan's batch wait, the whole
+    # scan -- indefinitely.
+    connect-timeout-ms: ${DISCOVERY_PROBE_CONNECT_TIMEOUT_MS:300}
+    read-timeout-ms: ${DISCOVERY_PROBE_READ_TIMEOUT_MS:2000}
+    total-timeout-ms: ${DISCOVERY_PROBE_TOTAL_TIMEOUT_MS:10000}
 server:
   port: ${PORT:8080}
 spring:

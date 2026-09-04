@@ -39,6 +39,9 @@ Network Discovery Provider is provided as a Docker container. Use the `hub.omnit
 | `DB_SCHEMA`     | Database schema to use                                   | ![](https://img.shields.io/badge/-NO-red.svg)      | `network`     |
 | `PORT`          | Port where the service is exposed                        | ![](https://img.shields.io/badge/-NO-red.svg)      | `8080`        |
 | `JAVA_OPTS`     | Customize Java system properties for running application | ![](https://img.shields.io/badge/-NO-red.svg)      | `N/A`         |
+| `DISCOVERY_PROBE_CONNECT_TIMEOUT_MS` | Milliseconds to wait for the TCP connection to a scanned target. Must be positive | ![](https://img.shields.io/badge/-NO-red.svg) | `300` |
+| `DISCOVERY_PROBE_READ_TIMEOUT_MS` | Milliseconds to wait between reads during the TLS handshake with a scanned target. Must be positive | ![](https://img.shields.io/badge/-NO-red.svg) | `2000` |
+| `DISCOVERY_PROBE_TOTAL_TIMEOUT_MS` | Milliseconds a single probe may take in total. Bounds a target that trickles data slowly enough to keep the read timeout from firing. Must be positive | ![](https://img.shields.io/badge/-NO-red.svg) | `10000` |
 
 ### Java runtime
 

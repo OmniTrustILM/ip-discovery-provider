@@ -135,6 +135,26 @@ class DiscoveryServiceLifecycleTest {
         Assertions.assertThrows(NotFoundException.class, () -> discoveryHistoryService.getHistoryByUuid(history.getUuid()));
     }
 
+    /** The delete is a bulk statement, so a wrong predicate would take the whole table and the test above still pass. */
+    @Test
+    void deletingADiscoveryLeavesOtherDiscoveriesCertificatesAlone() throws Exception {
+        storeCertificate("ZGlzY292ZXJ5LW9uZQ==");
+
+        DiscoveryRequestDto otherRequest = new DiscoveryRequestDto();
+        otherRequest.setName("survivor-" + UUID.randomUUID());
+        DiscoveryHistory other = discoveryHistoryService.addHistory(otherRequest);
+        Certificate survivor = new Certificate();
+        survivor.setUuid(UUID.randomUUID().toString());
+        survivor.setDiscoveryId(other.getId());
+        survivor.setBase64Content("ZGlzY292ZXJ5LXR3bw==");
+        certificateRepository.save(survivor);
+
+        discoveryService.deleteDiscovery(history.getUuid());
+
+        Assertions.assertTrue(certificateRepository.findByDiscoveryId(history.getId()).isEmpty());
+        Assertions.assertEquals(1, certificateRepository.findByDiscoveryId(other.getId()).size());
+    }
+
     @Test
     void deletingAnUnknownDiscoveryReportsNotFound() {
         Assertions.assertThrows(NotFoundException.class,

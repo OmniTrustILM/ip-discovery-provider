@@ -21,6 +21,7 @@ import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.DiscoveryHistoryService;
 import com.otilm.discovery.ip.service.DiscoveryService;
 import com.otilm.discovery.ip.util.DiscoverIpHandler;
+import com.otilm.discovery.ip.util.TargetEnumeration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,11 +30,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.io.IOException;
 import java.security.KeyManagementException;
@@ -45,7 +43,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 @Transactional
@@ -53,16 +51,9 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     private static final Logger logger = LoggerFactory.getLogger(DiscoveryServiceImpl.class);
 
-    private PlatformTransactionManager transactionManager;
-
     private ConnectionService connectionService;
     private CertificateRepository certificateRepository;
     private DiscoveryHistoryService discoveryHistoryService;
-
-    @Autowired
-    public void setTransactionManager(PlatformTransactionManager transactionManager) {
-        this.transactionManager = transactionManager;
-    }
 
     @Autowired
     public void setConnectionService(ConnectionService connectionService) {
@@ -86,8 +77,8 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         dto.setName(history.getName());
         dto.setStatus(history.getStatus());
         dto.setMeta(AttributeDefinitionUtils.deserialize(history.getMeta(), MetadataAttribute.class));
-        int totalCertificateSize = certificateRepository.findByDiscoveryId(history.getId()).size();
-        dto.setTotalCertificatesDiscovered(totalCertificateSize);
+        // A count, not a list: the full base64 content of every certificate is not needed to produce a number.
+        dto.setTotalCertificatesDiscovered((int) certificateRepository.countByDiscoveryId(history.getId()));
         if (history.getStatus() == DiscoveryStatus.IN_PROGRESS) {
             dto.setCertificateData(new ArrayList<>());
             dto.setTotalCertificatesDiscovered(0);
@@ -101,8 +92,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     @Override
     public void deleteDiscovery(String uuid) throws NotFoundException {
         DiscoveryHistory discoveryHistory = discoveryHistoryService.getHistoryByUuid(uuid);
-        List<Certificate> certificates = certificateRepository.findByDiscoveryId(discoveryHistory.getId());
-        certificateRepository.deleteAll(certificates);
+        certificateRepository.deleteAllByDiscoveryId(discoveryHistory.getId());
         discoveryHistoryService.deleteHistory(discoveryHistory);
     }
 
@@ -122,19 +112,24 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     private void discoverCertificatesInternal(DiscoveryRequestDto request, DiscoveryHistory history) {
         logger.info("Discovery initiated for the request with name {}", request.getName());
-        Set<String> urls = DiscoverIpHandler.getAllIp(request);
-        AtomicInteger successUrlCount = new AtomicInteger(0);
-        AtomicInteger failedUrlCount = new AtomicInteger(0);
-        AtomicInteger foundCertsCount = new AtomicInteger(0);
+        TargetEnumeration targets = DiscoverIpHandler.getTargets(request);
+        // Long, like the target count they are drawn from: an int wraps past 2.1 billion and would report a
+        // negative total for a scan the enumeration can now express.
+        AtomicLong successUrlCount = new AtomicLong(0);
+        AtomicLong failedUrlCount = new AtomicLong(0);
+        AtomicLong foundCertsCount = new AtomicLong(0);
         Set<String> uniqueCerts = Collections.synchronizedSet(new HashSet<>()); // Thread-safe set
 
         boolean failed = false;
-        TransactionStatus status = null;
         List<Future<?>> futures = new ArrayList<>();
-        int maxThreads = AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(request.getAttributes());
+        // Bounded here, not only at the validation endpoint: the discovery endpoint starts a scan without calling
+        // that endpoint, and the batch below is this loop's only backpressure.
+        int maxThreads = AttributeServiceImpl
+                .validateParallelExecutions(
+                        AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(request.getAttributes()));
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            status = transactionManager.getTransaction(new DefaultTransactionDefinition());
-            for (String url : urls) {
+            for (long i = 0; i < targets.size(); i++) {
+                String url = targets.target(i);
                 futures.add(executor.submit(() -> {
                     logger.debug("Discovering certificate for {}", url);
                     try {
@@ -146,12 +141,14 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                     }
                 }));
 
-                if (futures.size() == maxThreads) {
-                    status = commitDiscoveredCertsBatch(status, futures, history.getName());
+                // Not equality: a batch that overshoots its size still drains, where an equality check that is
+                // ever missed never drains again.
+                if (futures.size() >= maxThreads) {
+                    awaitBatch(futures, history.getName());
                 }
             }
             if (!futures.isEmpty()) {
-                status = commitDiscoveredCertsBatch(status, futures, history.getName());
+                awaitBatch(futures, history.getName());
             }
         } catch (Exception e) {
             failed = true;
@@ -160,32 +157,31 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 Thread.currentThread().interrupt();
             }
         } finally {
-            if (status == null || status.isCompleted()) {
-                status = transactionManager.getTransaction(new DefaultTransactionDefinition());
-            }
-
-            logger.info("Discovery {} has total of {} certificates, {} unique, from {} sources", request.getName(), foundCertsCount.get(), uniqueCerts.size(), urls.size());
+            logger.info("Discovery {} has total of {} certificates, {} unique, from {} sources", request.getName(), foundCertsCount.get(), uniqueCerts.size(), targets.size());
             history.setStatus(failed ? DiscoveryStatus.FAILED : DiscoveryStatus.COMPLETED);
-            history.setMeta(AttributeDefinitionUtils.serialize(getDiscoveryMetadata(urls.size(), successUrlCount.get(), failedUrlCount.get())));
+            history.setMeta(AttributeDefinitionUtils.serialize(getDiscoveryMetadata(targets.size(), successUrlCount.get(), failedUrlCount.get())));
             discoveryHistoryService.setHistory(history);
             logger.info("Discovery Completed. Name of the discovery is {}", request.getName());
-            transactionManager.commit(status);
         }
     }
 
-    private TransactionStatus commitDiscoveredCertsBatch(TransactionStatus status, List<Future<?>> futures, String discoveryName) throws ExecutionException, InterruptedException {
+    /**
+     * Waits for the batch in flight, then clears it so the next can be submitted.
+     *
+     * <p>
+     * This wait is the scan's only backpressure: targets are enumerated by index rather than materialised, so nothing
+     * else bounds submission and a large range would otherwise hand millions of tasks to the executor at once.
+     */
+    private void awaitBatch(List<Future<?>> futures, String discoveryName) throws ExecutionException, InterruptedException {
         logger.debug("Waiting for {} URL discovery tasks for discovery {}", futures.size(), discoveryName);
         for (Future<?> future : futures) {
             future.get();
         }
         logger.debug("{} URL discovery tasks for discovery {} finished", futures.size(), discoveryName);
         futures.clear();
-        transactionManager.commit(status);
-
-        return transactionManager.getTransaction(new DefaultTransactionDefinition());
     }
 
-    private void processCertificatesForUrl(String url, Long historyId, Set<String> uniqueCerts, AtomicInteger foundCertsCount) throws IOException, NoSuchAlgorithmException, KeyManagementException, CertificateEncodingException {
+    private void processCertificatesForUrl(String url, Long historyId, Set<String> uniqueCerts, AtomicLong foundCertsCount) throws IOException, NoSuchAlgorithmException, KeyManagementException, CertificateEncodingException {
         ConnectionResponse connection = connectionService.getCertificates(url);
         logger.debug("Connection to the url success. Certificates obtained");
         X509Certificate[] certificates = connection.getCertificates();
@@ -210,7 +206,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         }
     }
 
-    private List<MetadataAttributeV2> getDiscoveryMetadata(Integer totalUrls, Integer successUrls, Integer failedUrls) {
+    private List<MetadataAttributeV2> getDiscoveryMetadata(long totalUrls, long successUrls, long failedUrls) {
         List<MetadataAttributeV2> attributes = new ArrayList<>();
 
         //Total URL
@@ -226,7 +222,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         totalAttributeProperties.setVisible(true);
 
         totalAttribute.setProperties(totalAttributeProperties);
-        totalAttribute.setContent(List.of(new IntegerAttributeContentV2(totalUrls.toString(), totalUrls)));
+        totalAttribute.setContent(reportableCount(totalUrls));
         attributes.add(totalAttribute);
 
         //Success URL
@@ -242,7 +238,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         successAttributeProperties.setVisible(true);
 
         successAttribute.setProperties(successAttributeProperties);
-        successAttribute.setContent(List.of(new IntegerAttributeContentV2(successUrls.toString(), successUrls)));
+        successAttribute.setContent(reportableCount(successUrls));
         attributes.add(successAttribute);
 
         //Failed URL
@@ -258,10 +254,20 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         failedAttributeProperties.setVisible(true);
 
         failedAttribute.setProperties(failedAttributeProperties);
-        failedAttribute.setContent(List.of(new IntegerAttributeContentV2(failedUrls.toString(), failedUrls)));
+        failedAttribute.setContent(reportableCount(failedUrls));
         attributes.add(failedAttribute);
 
         return attributes;
+    }
+
+    /**
+     * These counts are longs -- a /16 on all ports is 4.29 billion targets -- but the attributes have been INTEGER
+     * since v1 and their type is part of that wire shape, so the numeric value is clamped while the reference keeps
+     * the exact figure.
+     */
+    // Package-private for the boundary test: the clamp is deliberately lossy and no reachable scan exercises it.
+    static List<com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2<?>> reportableCount(long value) {
+        return List.of(new IntegerAttributeContentV2(Long.toString(value), (int) Math.min(value, Integer.MAX_VALUE)));
     }
 
     private List<MetadataAttributeV2> getCertificateMetadata(String discoverySource) {

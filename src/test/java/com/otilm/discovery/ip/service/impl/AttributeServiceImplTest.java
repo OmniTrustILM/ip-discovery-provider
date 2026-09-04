@@ -126,6 +126,24 @@ class AttributeServiceImplTest {
         Assertions.assertThrows(ValidationException.class, () -> attributeService.validateAttributes(KIND, attributes));
     }
 
+    /**
+     * The port regex accepts a descending range, so nothing before this rejected one: the discovery was created and
+     * only the asynchronous scan failed, hours later. Validation and execution should agree.
+     */
+    @Test
+    void rejectsAReversedPortRangeOnValidation() {
+        List<RequestAttribute> attributes = new ArrayList<>(List.of(ip("10.0.0.1"), port("443-80"), allPorts(false)));
+
+        Assertions.assertThrows(ValidationException.class, () -> attributeService.validateAttributes(KIND, attributes));
+    }
+
+    @Test
+    void ignoresThePortListWhenEveryPortIsRequested() {
+        List<RequestAttribute> attributes = new ArrayList<>(List.of(ip("10.0.0.1"), port("443-80"), allPorts(true)));
+
+        Assertions.assertTrue(attributeService.validateAttributes(KIND, attributes));
+    }
+
     // --- content accessors ---
 
     @Test
@@ -174,5 +192,39 @@ class AttributeServiceImplTest {
     void fallsBackToSingleThreadedWhenParallelExecutionsIsAbsent() {
         Assertions.assertEquals(1,
                 AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(List.of(ip("10.0.0.1"))));
+    }
+
+    @Test
+    void acceptsTheParallelismAtBothEndsOfTheRange() {
+        Assertions
+                .assertEquals(AttributeServiceImpl.PARALLEL_EXECUTIONS_MIN,
+                        AttributeServiceImpl.validateParallelExecutions(AttributeServiceImpl.PARALLEL_EXECUTIONS_MIN));
+        Assertions
+                .assertEquals(AttributeServiceImpl.PARALLEL_EXECUTIONS_MAX,
+                        AttributeServiceImpl.validateParallelExecutions(AttributeServiceImpl.PARALLEL_EXECUTIONS_MAX));
+    }
+
+    /**
+     * Zero is the value that matters: the scan batches until it holds this many probes, so a batch that can never
+     * fill submits every target at once.
+     */
+    @Test
+    void rejectsAParallelismTheScanCannotHonour() {
+        for (Integer rejected : new Integer[] {null, 0, -1, AttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1,
+                Integer.MAX_VALUE}) {
+            Assertions
+                    .assertThrows(ValidationException.class,
+                            () -> AttributeServiceImpl.validateParallelExecutions(rejected),
+                            "parallelism " + rejected + " must not reach the scan loop");
+        }
+    }
+
+    /** The published constraint and the scan's own bound have to agree, or one path accepts what the other cannot. */
+    @Test
+    void rejectsAnOutOfRangeParallelismThroughTheValidationEndpointToo() {
+        List<RequestAttribute> attributes = new ArrayList<>(List.of(ip("10.0.0.1"), port("443"), allPorts(false)));
+        attributes.add(parallelExecutions(0));
+
+        Assertions.assertThrows(ValidationException.class, () -> attributeService.validateAttributes(KIND, attributes));
     }
 }
