@@ -259,7 +259,8 @@ public class DiscoveryServiceImpl implements DiscoveryService {
      * since v1 and their type is part of that wire shape, so the numeric value is clamped while the reference keeps
      * the exact figure.
      */
-    private static List<com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2<?>> reportableCount(long value) {
+    // Package-private for the boundary test: the clamp is deliberately lossy and no reachable scan exercises it.
+    static List<com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2<?>> reportableCount(long value) {
         return List.of(new IntegerAttributeContentV2(Long.toString(value), (int) Math.min(value, Integer.MAX_VALUE)));
     }
 

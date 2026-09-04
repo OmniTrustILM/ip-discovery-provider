@@ -286,6 +286,14 @@ public final class TargetEnumeration {
         }
         long value = 0;
         for (String octet : octets) {
+            // A leading zero fails the address regex but passes the subnet one, whose prefix is optional, so it
+            // arrived here as a /32 and contributed nothing -- a spec accepted with zero targets. Rejected rather
+            // than read as decimal, because the notation is ambiguous: 010 is octal 8 to inet_aton and decimal 10
+            // to Integer.parseInt, so accepting it can mean scanning a host nobody named.
+            if (octet.length() > 1 && octet.charAt(0) == '0') {
+                throw new ValidationException(
+                        "Invalid IP address, octets must not carry leading zeros: " + dottedQuad);
+            }
             int parsed = Integer.parseInt(octet);
             if (parsed > MAX_OCTET) {
                 throw new ValidationException(

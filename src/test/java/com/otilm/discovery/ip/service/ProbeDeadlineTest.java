@@ -11,6 +11,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A read timeout bounds inactivity between reads, not the probe. A peer that sends a byte just inside that window
@@ -27,7 +28,8 @@ class ProbeDeadlineTest {
     @Test
     void abandonsATargetThatTricklesBytesUnderTheReadTimeout() throws IOException {
         try (ServerSocket tarpit = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
-            startTarpit(tarpit);
+            AtomicReference<IOException> setupFailure = new AtomicReference<>();
+            startTarpit(tarpit, setupFailure);
             ConnectionService service =
                     new ConnectionServiceImpl(CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, TOTAL_TIMEOUT_MS);
             String url = "https://127.0.0.1:" + tarpit.getLocalPort();
@@ -44,6 +46,9 @@ class ProbeDeadlineTest {
                     .assertTrue(thrown.getMessage().contains("deadline"),
                             "a deadline abandonment must say so rather than read as an inactivity timeout, so it stays "
                                     + "distinguishable from a refused or silent target: " + thrown.getMessage());
+            Assertions
+                    .assertNull(setupFailure.get(),
+                            "the endpoint failed before it could exercise the deadline: " + setupFailure.get());
             Assertions
                     .assertTrue(elapsedMs < READ_TIMEOUT_MS * 4L,
                             "gave up after " + elapsedMs + " ms, far past the " + TOTAL_TIMEOUT_MS + " ms deadline");
@@ -76,7 +81,7 @@ class ProbeDeadlineTest {
      * client makes succeeds, so the read timeout never fires while the record never completes.
      */
     @SuppressWarnings("java:S2925") // the drip interval is the simulated server, not test synchronisation
-    private static void startTarpit(ServerSocket tarpit) {
+    private static void startTarpit(ServerSocket tarpit, AtomicReference<IOException> setupFailure) {
         Thread accepter = new Thread(() -> {
             try (Socket held = tarpit.accept(); OutputStream out = held.getOutputStream()) {
                 out.write(new byte[] {0x16, 0x03, 0x03, 0x40, 0x00});
@@ -86,7 +91,11 @@ class ProbeDeadlineTest {
                     out.flush();
                     Thread.sleep(DRIP_INTERVAL_MS);
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
+                // Recorded rather than swallowed: an endpoint that failed before it began dripping would otherwise
+                // look to the test like a probe that gave up, and the assertion would pass for the wrong reason.
+                setupFailure.set(e);
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }, "tarpit");

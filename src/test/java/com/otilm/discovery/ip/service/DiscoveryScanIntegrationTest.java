@@ -16,6 +16,7 @@ import com.otilm.discovery.ip.dao.Certificate;
 import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import com.otilm.discovery.ip.repository.CertificateRepository;
 import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
+import com.otilm.discovery.ip.service.impl.ConnectionServiceImpl;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsServer;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -37,6 +38,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.SocketTimeoutException;
 import java.net.Socket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -162,14 +164,12 @@ class DiscoveryScanIntegrationTest {
         // fixed value almost always fires early and never exercises the race at all.
         for (int attempt = 0; attempt < 200; attempt++) {
             ConnectionService racing =
-                    new com.otilm.discovery.ip.service.impl.ConnectionServiceImpl(300, 2000, 1 + attempt % 40);
+                    new ConnectionServiceImpl(300, 2000, 1 + attempt % 40);
             try {
                 Assertions.assertNotNull(racing.getCertificates(url).getCertificates());
             } catch (Exception thrown) {
-                // Succeeding is fine and timing out on the deadline is fine. Anything else means the watchdog
-                // disconnected a connection the probe had already claimed.
                 Assertions
-                        .assertInstanceOf(java.net.SocketTimeoutException.class, thrown,
+                        .assertInstanceOf(SocketTimeoutException.class, thrown,
                                 "attempt " + attempt + " failed with neither success nor a deadline timeout");
                 Assertions
                         .assertTrue(thrown.getMessage().contains("deadline"),
