@@ -78,7 +78,7 @@ class DiscoveryScanBoundednessTest {
 
     @Test
     void keepsInFlightProbesWithinTheConfiguredParallelism() throws Exception {
-        DiscoveryRequestDto request = scanRequest("boundedness-" + UUID.randomUUID());
+        DiscoveryRequestDto request = scanRequest("boundedness-" + UUID.randomUUID(), PARALLEL_EXECUTIONS);
         DiscoveryHistory history = discoveryHistoryService.addHistory(request);
 
         discoveryService.discoverCertificate(request, history);
@@ -96,7 +96,7 @@ class DiscoveryScanBoundednessTest {
                                 + PARALLEL_EXECUTIONS);
     }
 
-    private DiscoveryRequestDto scanRequest(String name) {
+    private DiscoveryRequestDto scanRequest(String name, int parallelExecutions) {
         DiscoveryRequestDto request = new DiscoveryRequestDto();
         request.setName(name);
         request.setKind("IP-Hostname");
@@ -115,8 +115,36 @@ class DiscoveryScanBoundednessTest {
                                 attribute("1517c7a5-34cb-4f94-a0aa-1e9fe5b5b277",
                                         AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME,
                                         AttributeContentType.INTEGER,
-                                        new IntegerAttributeContentV2(PARALLEL_EXECUTIONS))));
+                                        new IntegerAttributeContentV2(parallelExecutions))));
         return request;
+    }
+
+    /**
+     * A parallelism the batch can never reach is the unbounded case this test class exists for: every target would be
+     * submitted before the first wait. The scan has to refuse the request rather than start it, so nothing is probed.
+     */
+    @Test
+    void refusesAParallelismThatWouldNotBoundTheBatch() throws Exception {
+        DiscoveryRequestDto request = scanRequest("unbounded-" + UUID.randomUUID(), 0);
+        DiscoveryHistory history = discoveryHistoryService.addHistory(request);
+        int probedBefore = connectionService.completed.get();
+
+        discoveryService.discoverCertificate(request, history);
+
+        await()
+                .atMost(Duration.ofSeconds(30))
+                .until(() -> discoveryHistoryService
+                        .getHistoryByUuid(history.getUuid())
+                        .getStatus() != DiscoveryStatus.IN_PROGRESS);
+
+        DiscoveryHistory finished = discoveryHistoryService.getHistoryByUuid(history.getUuid());
+        Assertions.assertEquals(DiscoveryStatus.FAILED, finished.getStatus());
+        Assertions
+                .assertEquals(probedBefore, connectionService.completed.get(),
+                        "the scan must be refused before a single target is submitted");
+        Assertions
+                .assertTrue(String.valueOf(finished.getMeta()).contains("parallel executions"),
+                        "the failure reason should name what was rejected: " + finished.getMeta());
     }
 
     private static RequestAttributeV2 attribute(String uuid, String name, AttributeContentType type,

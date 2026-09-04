@@ -122,7 +122,11 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
         boolean failed = false;
         List<Future<?>> futures = new ArrayList<>();
-        int maxThreads = AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(request.getAttributes());
+        // Bounded here, not only at the validation endpoint: the discovery endpoint starts a scan without calling
+        // that endpoint, and the batch below is this loop's only backpressure.
+        int maxThreads = AttributeServiceImpl
+                .validateParallelExecutions(
+                        AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(request.getAttributes()));
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             for (long i = 0; i < targets.size(); i++) {
                 String url = targets.target(i);
@@ -137,7 +141,9 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                     }
                 }));
 
-                if (futures.size() == maxThreads) {
+                // Not equality: a batch that overshoots its size still drains, where an equality check that is
+                // ever missed never drains again.
+                if (futures.size() >= maxThreads) {
                     awaitBatch(futures, history.getName());
                 }
             }
