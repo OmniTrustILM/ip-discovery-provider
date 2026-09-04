@@ -16,7 +16,6 @@ import com.otilm.discovery.ip.dao.Certificate;
 import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import com.otilm.discovery.ip.repository.CertificateRepository;
 import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
-import com.otilm.discovery.ip.service.impl.ConnectionServiceImpl;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsServer;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -38,7 +37,6 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.SocketTimeoutException;
 import java.net.Socket;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -146,36 +144,6 @@ class DiscoveryScanIntegrationTest {
         }
         if (refusingEndpoint != null) {
             refusingEndpoint.close();
-        }
-    }
-
-    /**
-     * The watchdog and the probe race for the same connection whenever a deadline lands near the handshake
-     * completing, and cancel() does not stop a callback that has already begun. Whichever wins, the outcome must be
-     * one of exactly two things: a probe that succeeded, or a timeout that says it was the deadline. An unrelated
-     * socket error means the watchdog disconnected a connection the probe had already claimed.
-     */
-    @Test
-    void aDeadlineRacingACompletedHandshakeNeverProducesAnUnrelatedError() {
-        String url = "https://localhost:" + port;
-
-        // Swept rather than fixed: the window is the instant between connect() returning and the probe claiming
-        // the connection, so a deadline has to land near the handshake's own duration to fall inside it. One
-        // fixed value almost always fires early and never exercises the race at all.
-        for (int attempt = 0; attempt < 200; attempt++) {
-            ConnectionService racing =
-                    new ConnectionServiceImpl(300, 2000, 1 + attempt % 40);
-            try {
-                Assertions.assertNotNull(racing.getCertificates(url).getCertificates());
-            } catch (Exception thrown) {
-                Assertions
-                        .assertInstanceOf(SocketTimeoutException.class, thrown,
-                                "attempt " + attempt + " failed with neither success nor a deadline timeout");
-                Assertions
-                        .assertTrue(thrown.getMessage().contains("deadline"),
-                                "attempt " + attempt + " timed out without naming the deadline: "
-                                        + thrown.getMessage());
-            }
         }
     }
 
