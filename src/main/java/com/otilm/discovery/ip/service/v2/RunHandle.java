@@ -59,6 +59,17 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
         return new RunHandle(RunState.RUNNING, 0L, 0L, targetsDigest, 0L, 0L, Map.of());
     }
 
+    /**
+     * The checkpoint a stop answers with. The high water comes from the buffer's own sequencer rather than the last
+     * chunk boundary: probes inside the interrupted chunk have already been numbered, and freezing the boundary value
+     * instead leaves those sequences outside the checkpoint — which a later drain then reads as a mismatch, and a
+     * resumed run reissues.
+     */
+    public RunHandle stoppedAt(long sequenceHighWater) {
+        return new RunHandle(RunState.STOPPED, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed,
+                targetsFailed, yieldByResource);
+    }
+
     public RunHandle withState(RunState newState) {
         return new RunHandle(newState, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
                 yieldByResource);

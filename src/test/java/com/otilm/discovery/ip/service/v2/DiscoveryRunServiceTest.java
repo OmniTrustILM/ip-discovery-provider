@@ -276,7 +276,9 @@ class DiscoveryRunServiceTest {
         RunHandle handle = RunHandle.from(stopped.getMeta()).orElseThrow();
         Assertions.assertEquals(RunHandle.RunState.STOPPED, handle.state());
         Assertions.assertEquals(DiscoveryRunState.STOPPED, registry.state(runId).orElseThrow());
-        Assertions.assertEquals(4L, handle.sequenceHighWater(), "the checkpoint preserves the sequence counter");
+        // This is the already-finished case, where the boundary value and the buffer counter agree anyway. The
+        // interrupted-chunk case, where they do not, is what StopResumeSeamTest exists for.
+        Assertions.assertEquals(4L, handle.sequenceHighWater());
     }
 
     @Test
@@ -395,5 +397,24 @@ class DiscoveryRunServiceTest {
         awaitCompletion(runId);
 
         Assertions.assertNull(service.status(runRequest(runId)).getProgress().getPhase());
+    }
+
+    /**
+     * The run has to end FAILED rather than COMPLETED. A completed run that quietly dropped most of its items is the
+     * failure mode the whole buffer design exists to avoid.
+     */
+    @Test
+    void aRunThatOutgrowsItsBufferEndsFailedRatherThanComplete() {
+        UUID runId = UUID.randomUUID();
+        BufferBudget tight = new BufferBudget(4, 1, 1L << 30, 1L << 31, 150);
+        DiscoveryRunService starved = new DiscoveryRunService(registry, tight, attributeService(), probes);
+
+        starved.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.8"));
+        Awaitility
+                .await()
+                .atMost(Duration.ofSeconds(30))
+                .until(() -> registry.state(runId).orElseThrow() != DiscoveryRunState.RUNNING);
+
+        Assertions.assertEquals(DiscoveryRunState.FAILED, registry.state(runId).orElseThrow());
     }
 }

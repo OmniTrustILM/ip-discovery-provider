@@ -12,6 +12,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.LongSupplier;
@@ -49,6 +53,12 @@ public class RunRegistry {
         private final AtomicLong lastDriven;
         /** Zero means not yet known, which is why it is reported as absent rather than as a total of nought. */
         private final AtomicLong targetsTotal = new AtomicLong();
+        private final AtomicReference<Future<?>> scan = new AtomicReference<>();
+        /**
+         * Set when a run is rebuilt from a replayed checkpoint, and cleared by the first drain that proves Core is
+         * exactly at it. Zero means no verification is owed.
+         */
+        private final AtomicLong drainVerificationOwedAt = new AtomicLong();
 
         private Entry(RunHandle handle, long now) {
             this.handle = new AtomicReference<>(handle);
@@ -126,6 +136,71 @@ public class RunRegistry {
     public Optional<ResultBuffer> buffer(UUID runId) {
         Entry entry = runs.get(runId);
         return entry == null ? Optional.empty() : Optional.ofNullable(entry.buffer.get());
+    }
+
+    /** The scan in flight, so a stop can wait for it rather than answering while it is still numbering items. */
+    public void attachScan(UUID runId, Future<?> scan) {
+        Entry entry = runs.get(runId);
+        if (entry != null) {
+            entry.scan.set(scan);
+        }
+    }
+
+    /**
+     * Waits for the run's scan to finish. Bounded because a stop interrupts rather than quiesces, so the wait is for
+     * threads to unwind and not for probes to complete.
+     *
+     * @return false if the scan did not finish inside the window, which the caller reports rather than hides
+     */
+    public boolean awaitScan(UUID runId, Duration within) {
+        Entry entry = runs.get(runId);
+        Future<?> scan = entry == null ? null : entry.scan.get();
+        if (scan == null) {
+            return true;
+        }
+        try {
+            scan.get(within.toMillis(), TimeUnit.MILLISECONDS);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (TimeoutException e) {
+            return false;
+        } catch (ExecutionException | java.util.concurrent.CancellationException e) {
+            // The scan ended badly or was cancelled; either way it is no longer numbering items, which is all a stop
+            // needs to know.
+            return true;
+        }
+    }
+
+    /**
+     * Records that this run was rebuilt and may not serve items until a drain arrives at exactly {@code highWater}.
+     *
+     * <p>
+     * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by
+     * either would otherwise have every later drain served with no cursor check at all.
+     */
+    public void oweDrainVerification(UUID runId, long highWater) {
+        Entry entry = runs.get(runId);
+        if (entry != null) {
+            entry.drainVerificationOwedAt.set(highWater);
+        }
+    }
+
+    /** The high water a drain must match before this run may serve anything, or empty when none is owed. */
+    public Optional<Long> drainVerificationOwed(UUID runId) {
+        Entry entry = runs.get(runId);
+        if (entry == null || entry.drainVerificationOwedAt.get() <= 0) {
+            return Optional.empty();
+        }
+        return Optional.of(entry.drainVerificationOwedAt.get());
+    }
+
+    public void drainVerified(UUID runId) {
+        Entry entry = runs.get(runId);
+        if (entry != null) {
+            entry.drainVerificationOwedAt.set(0);
+        }
     }
 
     public Optional<ScanRunner> runner(UUID runId) {

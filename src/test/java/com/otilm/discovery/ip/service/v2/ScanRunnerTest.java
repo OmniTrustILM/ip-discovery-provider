@@ -295,4 +295,61 @@ class ScanRunnerTest {
                         buffer.page(0, 10, 1L << 20).items().get(0).getUniqueRef(),
                         "a key item is correlated by its fingerprint");
     }
+
+    // --- item source, and a bound the run cannot continue past ---
+
+    /**
+     * Where an item was found. v1 attached this per certificate as discoverySource; without it an operator has an
+     * inventory of certificates and no way to tell which host and port produced any of them.
+     */
+    @Test
+    void recordsWhereEachItemWasFound() throws Exception {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1", "443,8443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+
+        runner(runId, targets, buffer, new AlwaysAnswers(), 4,
+                Set.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY)).scan();
+
+        List<String> sources = buffer
+                .page(0, 100, 1L << 20)
+                .items()
+                .stream()
+                .map(item -> (String) ((com.otilm.api.model.common.attribute.v3.MetadataAttributeV3) item
+                        .getMeta()
+                        .get(0)).getContent().get(0).getData())
+                .distinct()
+                .sorted()
+                .toList();
+
+        Assertions.assertEquals(List.of("https://10.0.0.1:443", "https://10.0.0.1:8443"), sources);
+        Assertions
+                .assertEquals("meta_discoverySource",
+                        buffer.page(0, 1, 1L << 20).items().get(0).getMeta().get(0).getName());
+    }
+
+    /**
+     * A bound that cannot be waited out ends the run. Counting it as one more failed target would be silent
+     * truncation: a legitimate dark sweep also reports enormous failed-target counts, so a buffer-starved run would
+     * be indistinguishable from one that simply found nothing listening.
+     */
+    @Test
+    void failsTheRunWhenTheBufferCannotHoldWhatItProduces() {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.8", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        // Room for one item, and no time to wait for a drain that is never coming.
+        BufferBudget tight = new BufferBudget(4, 1, 1L << 30, 1L << 31, 150);
+        ResultBuffer buffer = openBuffer(runId, tight, 0);
+
+        BufferBudget.BufferLimitExceededException thrown = Assertions
+                .assertThrows(BufferBudget.BufferLimitExceededException.class,
+                        () -> runner(runId, targets, buffer, new AlwaysAnswers(), 8).scan());
+
+        Assertions.assertTrue(thrown.getMessage().contains("max-items-per-run"), thrown.getMessage());
+        Assertions
+                .assertTrue(registry.find(runId).orElseThrow().targetsFailed() < 8,
+                        "the run must end on the limit, not grind through every target reporting failures");
+    }
 }

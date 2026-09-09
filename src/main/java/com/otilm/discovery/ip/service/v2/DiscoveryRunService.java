@@ -30,6 +30,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.time.Duration;
 
 /**
  * The run lifecycle: initiate, status, results, stop, resume, cancel.
@@ -128,6 +130,7 @@ public class DiscoveryRunService {
             rebuildForDrain(request);
         }
         registry.touch(runId);
+        requireDrainVerified(runId, request.getAfterSequence());
         ResultBuffer buffer = registry.buffer(runId).orElseThrow(() -> new UnknownRunException(runId));
 
         buffer.discardThrough(request.getAfterSequence());
@@ -151,10 +154,24 @@ public class DiscoveryRunService {
         registry.find(runId).orElseThrow(() -> new UnknownRunException(runId));
         registry.touch(runId);
 
-        registry.runner(runId).ifPresent(ScanRunner::stop);
+        // Marked stopped before the scan is asked to stop, so a chunk finishing in between cannot move the
+        // checkpoint after this call has answered with one.
+        registry.update(runId, handle -> handle.withState(RunHandle.RunState.STOPPED));
         registry.setState(runId, DiscoveryRunState.STOPPED);
+        registry.runner(runId).ifPresent(ScanRunner::stop);
+
+        // Waited for rather than raced. The scan is interrupted, not quiesced, so this is a wait for threads to
+        // unwind; while any probe is still running it may number another item, and the checkpoint would miss it.
+        if (!registry.awaitScan(runId, SCAN_SETTLE)) {
+            logger.warn("Run {} did not settle within {} of the stop; checkpointing anyway", runId, SCAN_SETTLE);
+        }
+
+        // From the buffer, not from the last chunk boundary. Probes inside the interrupted chunk have already been
+        // numbered, and a checkpoint that omitted them would be read as a mismatch by the next drain -- killing a run
+        // that lost nothing -- and would have a resumed run reissue those numbers.
+        long highWater = registry.buffer(runId).map(ResultBuffer::highestSequence).orElse(0L);
         RunHandle stopped = registry
-                .update(runId, handle -> handle.withState(RunHandle.RunState.STOPPED))
+                .update(runId, handle -> handle.stoppedAt(Math.max(highWater, handle.sequenceHighWater())))
                 .orElseThrow(() -> new UnknownRunException(runId));
 
         DiscoveryStopResponseDto response = new DiscoveryStopResponseDto();
@@ -229,10 +246,33 @@ public class DiscoveryRunService {
         // A rebuilt run holds no items: whatever it had was in memory this node no longer has. The buffer exists so
         // a resume numbers from where the checkpoint left off rather than from one.
         registry.attach(runId, null, new ResultBuffer(runId, budget, handle.sequenceHighWater()));
+        registry.oweDrainVerification(runId, handle.sequenceHighWater());
         // The enumeration is rebuilt from the same replayed request, so a rebuilt run reports a total like any other.
         registry.setTargetsTotal(runId, enumerate(request).size());
         logger.info("Rebuilt stopped run {} from its replayed checkpoint at cursor {}", runId, handle.cursorIndex());
         return handle;
+    }
+
+    /**
+     * A rebuilt run serves nothing until a drain proves Core is exactly at the checkpoint it was rebuilt from.
+     *
+     * <p>
+     * The check cannot live in the rebuild call alone. Status and resume rebuild too, and after either of those the
+     * run is registered, so every later drain would take the ordinary path with no cursor check at all -- including
+     * the resume flow the verdict exists for, where Core expedites the drain straight into a registered run.
+     */
+    private void requireDrainVerified(UUID runId, long afterSequence) {
+        Long owed = registry.drainVerificationOwed(runId).orElse(null);
+        if (owed == null) {
+            return;
+        }
+        if (afterSequence != owed) {
+            logger
+                    .warn("Refusing to serve rebuilt run {}: Core is at sequence {} and the checkpoint at {}", runId,
+                            afterSequence, owed);
+            throw new UnknownRunException(runId);
+        }
+        registry.drainVerified(runId);
     }
 
     /**
@@ -259,6 +299,9 @@ public class DiscoveryRunService {
         }
         rebuild(request);
     }
+
+    /** How long a stop waits for an interrupted scan to unwind before checkpointing regardless. */
+    private static final Duration SCAN_SETTLE = Duration.ofSeconds(10);
 
     /**
      * The checkpoint indexes into an enumeration, so it can only be continued against the same one. ND3's guard:
@@ -314,11 +357,16 @@ public class DiscoveryRunService {
     private void start(UUID runId, TargetEnumeration targets, RunHandle handle, int parallelism,
             List<Resource> resources) {
         registry.setTargetsTotal(runId, targets.size());
-        ResultBuffer buffer = new ResultBuffer(runId, budget, handle.sequenceHighWater());
+        // Reused when this node already holds one. Replacing it would drop the items Core has not drained yet and
+        // reseed the sequencer below its own counter, so the resumed run would reissue numbers Core has already
+        // ingested and every one of them would be discarded by its cursor filter.
+        ResultBuffer buffer = registry
+                .buffer(runId)
+                .orElseGet(() -> new ResultBuffer(runId, budget, handle.sequenceHighWater()));
         ScanRunner runner = new ScanRunner(runId, targets, buffer, registry, connectionService, parallelism,
                 EnumSet.copyOf(resources));
         registry.attach(runId, runner, buffer);
-        scans.submit(() -> {
+        Future<?> scan = scans.submit(() -> {
             try {
                 if (runner.scan()) {
                     registry.setState(runId, DiscoveryRunState.COMPLETED);
@@ -329,6 +377,7 @@ public class DiscoveryRunService {
                 logger.error("Run {} failed: {}", runId, e.getMessage(), e);
             }
         });
+        registry.attachScan(runId, scan);
     }
 
     /**

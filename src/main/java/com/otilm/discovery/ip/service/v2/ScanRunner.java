@@ -3,6 +3,12 @@ package com.otilm.discovery.ip.service.v2;
 import com.otilm.api.model.connector.discovery.v2.DiscoveredCertificateDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveredItemDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveredKeyDto;
+import com.otilm.api.model.common.attribute.common.AttributeType;
+import com.otilm.api.model.common.attribute.common.MetadataAttribute;
+import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
+import com.otilm.api.model.common.attribute.common.properties.MetadataAttributeProperties;
+import com.otilm.api.model.common.attribute.v3.MetadataAttributeV3;
+import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
@@ -30,6 +36,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * One run's scan: targets in chunks, results into the buffer, position into the handle.
@@ -61,6 +68,8 @@ public class ScanRunner {
     private final Set<Resource> resources;
 
     private final AtomicBoolean stopping = new AtomicBoolean();
+    /** A bound the run cannot continue past. Held so the scan ends deliberately rather than as a failed target. */
+    private final AtomicReference<RuntimeException> fatal = new AtomicReference<>();
     private final List<Future<?>> inFlight = new ArrayList<>();
 
     public ScanRunner(UUID runId, TargetEnumeration targets, ResultBuffer buffer, RunRegistry registry,
@@ -106,7 +115,20 @@ public class ScanRunner {
                 commit(cursor, tally);
             }
         }
+        raiseIfFatal();
         return true;
+    }
+
+    /**
+     * A buffer bound that cannot be waited out ends the run, naming the limit. Counting it as one more failed target
+     * would be silent truncation: a legitimate dark sweep also reports millions of failed targets, so a
+     * buffer-starved run would be indistinguishable from one that simply found nothing listening.
+     */
+    private void raiseIfFatal() {
+        RuntimeException limit = fatal.get();
+        if (limit != null) {
+            throw limit;
+        }
     }
 
     /** Interrupts whatever is in flight. The probes are on virtual threads, where a socket read does unblock. */
@@ -161,6 +183,7 @@ public class ScanRunner {
                 logger.debug("Probe in run {} ended with {}", runId, e.getCause().toString());
             }
         }
+        raiseIfFatal();
         return complete && !stopping.get() ? tally : null;
     }
 
@@ -176,13 +199,13 @@ public class ScanRunner {
             for (X509Certificate certificate : response.getCertificates()) {
                 byte[] der = certificate.getEncoded();
                 if (resources.contains(Resource.CERTIFICATE)) {
-                    buffer.add(certificateItem(der), weightOf(der.length));
+                    buffer.add(certificateItem(der, url), weightOf(der.length));
                     counted(tally, Resource.CERTIFICATE);
                 }
                 // Driven by the run's resource set rather than always on: a key per certificate roughly doubles item
                 // count, sequence consumption and buffer occupancy.
                 if (resources.contains(Resource.CRYPTOGRAPHIC_KEY)) {
-                    buffer.add(keyItem(certificate), KEY_ITEM_WEIGHT);
+                    buffer.add(keyItem(certificate, url), KEY_ITEM_WEIGHT);
                     counted(tally, Resource.CRYPTOGRAPHIC_KEY);
                 }
             }
@@ -191,6 +214,13 @@ public class ScanRunner {
             // A stop reaches a probe parked on backpressure exactly here. Nothing is counted: the cursor has not
             // advanced past this chunk, so the target is scanned again on resume.
             Thread.currentThread().interrupt();
+        } catch (BufferBudget.BufferLimitExceededException e) {
+            // Not a failed target: the run cannot hold what it is producing, and has to say so rather than report a
+            // short scan that looks complete.
+            if (fatal.compareAndSet(null, e)) {
+                logger.error("Run {} cannot continue: {}", runId, e.getMessage());
+            }
+            stop();
         } catch (Exception e) {
             logger.debug("Probe of {} in run {} failed: {}", url, runId, e.getMessage());
             tally.processed.incrementAndGet();
@@ -207,6 +237,12 @@ public class ScanRunner {
     private void commit(long cursor, ChunkTally tally) {
         registry
                 .update(runId, handle -> {
+                    // A chunk finishing after a stop was recorded must not move the checkpoint: the stop has already
+                    // answered with one, and Core would be left holding a handle the connector had moved past.
+                    // Leaving the cursor where it was only costs re-scanning this chunk on resume.
+                    if (handle.state() == RunHandle.RunState.STOPPED) {
+                        return handle;
+                    }
                     Map<String, Long> yield = new HashMap<>(handle.yieldByResource());
                     tally.yield.forEach((resource, count) -> yield.merge(resource, count.get(), Long::sum));
                     return new RunHandle(handle.state(), cursor, buffer.highestSequence(), handle.targetsDigest(),
@@ -219,13 +255,39 @@ public class ScanRunner {
         tally.yield.computeIfAbsent(resource.getCode(), key -> new AtomicLong()).incrementAndGet();
     }
 
-    private static DiscoveredItemDto certificateItem(byte[] der) throws NoSuchAlgorithmException {
+    private static final String SOURCE_ATTRIBUTE_UUID = "c1f0e6a2-3d5b-4a17-9f8c-6b2e0d4a7e31";
+
+    /**
+     * Where the item was found, which the contract asks for as typed metadata and v1 attached per certificate as
+     * discoverySource. Without it an operator has an inventory of certificates and no way to tell which host and
+     * port produced any of them.
+     */
+    private static List<MetadataAttribute> sourceOf(String url) {
+        MetadataAttributeV3 attribute = new MetadataAttributeV3();
+        attribute.setUuid(SOURCE_ATTRIBUTE_UUID);
+        attribute.setName("meta_discoverySource");
+        attribute.setType(AttributeType.META);
+        attribute.setContentType(AttributeContentType.STRING);
+        attribute.setDescription("The address and port this item was discovered on");
+
+        MetadataAttributeProperties properties = new MetadataAttributeProperties();
+        properties.setLabel("Discovery source");
+        properties.setVisible(true);
+        properties.setGlobal(false);
+        attribute.setProperties(properties);
+
+        attribute.setContent(List.of(new StringAttributeContentV3(url, url)));
+        return List.of(attribute);
+    }
+
+    private static DiscoveredItemDto certificateItem(byte[] der, String url) throws NoSuchAlgorithmException {
         DiscoveredCertificateDto payload = new DiscoveredCertificateDto();
         payload.setCertificateData(Base64.getEncoder().encodeToString(der));
 
         DiscoveredItemDto item = new DiscoveredItemDto();
         item.setUniqueRef(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(der)));
         item.setPayload(payload);
+        item.setMeta(sourceOf(url));
         item.setDiscoveredAt(OffsetDateTime.now());
         return item;
     }
@@ -234,12 +296,14 @@ public class ScanRunner {
      * The key a certificate already carries. Its uniqueRef is the fingerprint, which is what the platform correlates
      * staged keys on, so the same key seen on two hosts collapses to one item rather than two.
      */
-    private static DiscoveredItemDto keyItem(X509Certificate certificate) throws NoSuchAlgorithmException {
+    private static DiscoveredItemDto keyItem(X509Certificate certificate, String url)
+            throws NoSuchAlgorithmException {
         DiscoveredKeyDto payload = KeyMapper.toKey(certificate);
 
         DiscoveredItemDto item = new DiscoveredItemDto();
         item.setUniqueRef(payload.getFingerprint());
         item.setPayload(payload);
+        item.setMeta(sourceOf(url));
         item.setDiscoveredAt(OffsetDateTime.now());
         return item;
     }
