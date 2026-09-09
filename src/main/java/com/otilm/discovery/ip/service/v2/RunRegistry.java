@@ -107,6 +107,21 @@ public class RunRegistry {
         return entry == null ? Optional.empty() : Optional.of(entry.state.get());
     }
 
+    /**
+     * Moves a run between states only if it is where the caller believed it was.
+     *
+     * <p>
+     * A read followed by a write is not enough here: two resumes can both read STOPPED and both start a scan, which
+     * puts two sequencers on one run issuing the same numbers, lets the cursor move backwards, and leaves the loser
+     * buffer charging the budget with items nothing will ever serve.
+     *
+     * @return true if this call performed the transition
+     */
+    public boolean compareAndSetState(UUID runId, DiscoveryRunState expected, DiscoveryRunState next) {
+        Entry entry = runs.get(runId);
+        return entry != null && entry.state.compareAndSet(expected, next);
+    }
+
     public void setState(UUID runId, DiscoveryRunState state) {
         Entry entry = runs.get(runId);
         if (entry != null) {

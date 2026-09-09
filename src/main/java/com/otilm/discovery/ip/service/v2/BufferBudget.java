@@ -73,23 +73,42 @@ public class BufferBudget {
         private long bytes;
     }
 
+    /** Why a run was or was not admitted. The two refusals mean different things and get different answers. */
+    public enum Admission {
+        ADMITTED,
+        /** This node is already feeding this run, which is a repeat rather than a new one. */
+        ALREADY_HELD,
+        /** This node is feeding as many runs as it can, which is retryable elsewhere or later. */
+        AT_CAPACITY
+    }
+
     /**
-     * Admits a run, or refuses it because this node already holds as many as it can feed. Refusing at initiate is the
-     * point: a run accepted beyond the cap would be starved by the others rather than told it cannot run.
+     * Admits a run to the node's buffer budget.
      *
-     * @return false when the cap is reached, or when the run is already admitted
+     * <p>
+     * Refusing at capacity is the point: a run accepted beyond the cap would be starved by the others rather than
+     * told it cannot run. But an already-held run is checked first, and deliberately — reporting it as at-capacity
+     * turns a repeat that must be answered idempotently into a false claim that the node is full.
      */
-    public boolean open(UUID runId) {
+    public Admission admit(UUID runId) {
         lock.lock();
         try {
-            if (holdings.size() >= maxRuns || holdings.containsKey(runId)) {
-                return false;
+            if (holdings.containsKey(runId)) {
+                return Admission.ALREADY_HELD;
+            }
+            if (holdings.size() >= maxRuns) {
+                return Admission.AT_CAPACITY;
             }
             holdings.put(runId, new Holding());
-            return true;
+            return Admission.ADMITTED;
         } finally {
             lock.unlock();
         }
+    }
+
+    /** @return true if this call admitted the run */
+    public boolean open(UUID runId) {
+        return admit(runId) == Admission.ADMITTED;
     }
 
     public void close(UUID runId) {

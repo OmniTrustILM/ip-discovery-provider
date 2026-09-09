@@ -83,15 +83,23 @@ public class DiscoveryRunService {
         TargetEnumeration targets = enumerate(request);
         int parallelism = attributes.readParallelExecutions(request.getAttributes());
 
-        if (!budget.open(runId)) {
-            throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
-        }
         RunHandle handle = RunHandle.initial(targets.digest());
-        if (!registry.register(runId, handle)) {
-            // Lost a race with a concurrent initiate for the same run: that one owns the scan, and this one answers
-            // as the repeat it turned out to be.
-            budget.close(runId);
-            return accepted(registry.find(runId).orElseThrow(() -> new UnknownRunException(runId)));
+        switch (budget.admit(runId)) {
+            case AT_CAPACITY ->
+                throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
+            case ALREADY_HELD -> {
+                // A concurrent initiate for the same run got here first and is still registering. The contract wants
+                // the repeat answered idempotently, so it is answered with the same checkpoint the winner started
+                // from -- not with a claim that the node is full, which is what conflating the two refusals produced.
+                logger.info("Run {} is already being started; answering the concurrent initiate idempotently", runId);
+                return accepted(registry.find(runId).orElse(handle));
+            }
+            case ADMITTED -> {
+                if (!registry.register(runId, handle)) {
+                    budget.close(runId);
+                    return accepted(registry.find(runId).orElse(handle));
+                }
+            }
         }
 
         start(runId, targets, handle, parallelism, request.getResources());
@@ -190,22 +198,36 @@ public class DiscoveryRunService {
         RunHandle handle = registry.find(runId).orElseGet(() -> rebuild(request));
         registry.touch(runId);
 
-        if (registry.state(runId).orElse(DiscoveryRunState.RUNNING) == DiscoveryRunState.RUNNING) {
+        // One winner. Two resumes can both read STOPPED, and both would start a scan.
+        if (!registry.compareAndSetState(runId, DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING)) {
             logger.info("Run {} is already running; the resume is a no-op", runId);
             return accepted(handle);
         }
 
-        requireSupported(request.getResources());
-        TargetEnumeration targets = enumerate(request);
-        requireSameEnumeration(runId, handle, targets);
-        int parallelism = attributes.readParallelExecutions(request.getAttributes());
+        try {
+            requireSupported(request.getResources());
+            TargetEnumeration targets = enumerate(request);
+            requireSameEnumeration(runId, handle, targets);
+            int parallelism = attributes.readParallelExecutions(request.getAttributes());
 
-        RunHandle running = registry
-                .update(runId, current -> current.withState(RunHandle.RunState.RUNNING))
-                .orElseThrow(() -> new UnknownRunException(runId));
-        registry.setState(runId, DiscoveryRunState.RUNNING);
-        start(runId, targets, running, parallelism, request.getResources());
-        return accepted(running);
+            // The budget opens here rather than at rebuild, because this is where the run starts producing. A
+            // rebuilt run that only answers status and drains holds nothing, and charging it against the scanning
+            // cap is what let a busy node refuse -- and so kill -- a run it merely could not scan.
+            if (budget.admit(runId) == BufferBudget.Admission.AT_CAPACITY) {
+                throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
+            }
+
+            RunHandle running = registry
+                    .update(runId, current -> current.withState(RunHandle.RunState.RUNNING))
+                    .orElseThrow(() -> new UnknownRunException(runId));
+            start(runId, targets, running, parallelism, request.getResources());
+            return accepted(running);
+        } catch (RuntimeException e) {
+            // Put the run back where it was, so a corrected retry can still resume it rather than finding a run
+            // marked running that nothing is scanning.
+            registry.compareAndSetState(runId, DiscoveryRunState.RUNNING, DiscoveryRunState.STOPPED);
+            throw e;
+        }
     }
 
     /** Forgets the run and everything it held. A later call finds nothing, which is the contract's expected answer. */
@@ -235,11 +257,11 @@ public class DiscoveryRunService {
         }
 
         requireSupported(request.getResources());
-        if (!budget.open(runId)) {
-            throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
-        }
+        // No budget is taken. A rebuilt run holds no items -- whatever it had was in memory this node no longer has
+        // -- and it may only answer status and drains until a resume starts production, which is where the budget is
+        // taken instead. Charging it here meant a node at its run cap refused the very ticks that keep a stopped run
+        // alive, and Core reads a refusal often enough as the run being unrecoverable.
         if (!registry.register(runId, handle)) {
-            budget.close(runId);
             return registry.find(runId).orElseThrow(() -> new UnknownRunException(runId));
         }
         registry.setState(runId, DiscoveryRunState.STOPPED);
