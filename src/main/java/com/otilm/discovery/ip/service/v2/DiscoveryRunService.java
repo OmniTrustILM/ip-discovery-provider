@@ -366,7 +366,7 @@ public class DiscoveryRunService {
             Map<Resource, DiscoveryResourceProgressDto> byResource = new LinkedHashMap<>();
             yield.forEach((code, items) -> {
                 DiscoveryResourceProgressDto resourceProgress = new DiscoveryResourceProgressDto();
-                resourceProgress.setProcessed(items);
+                resourceProgress.setProduced(items);
                 // No estimate: one target yields anywhere from no items to a whole chain, so any total would be a
                 // guess Core would render as a percentage.
                 byResource.put(Resource.findByCode(code), resourceProgress);

@@ -347,7 +347,7 @@ class DiscoveryRunServiceTest {
         Assertions.assertEquals(4L, progress.getTargetsProcessed());
         Assertions.assertEquals(0L, progress.getTargetsFailed());
         Assertions
-                .assertEquals(4L, progress.getByResource().get(Resource.CERTIFICATE).getProcessed(),
+                .assertEquals(4L, progress.getByResource().get(Resource.CERTIFICATE).getProduced(),
                         "yield is counted in items, which is a different unit from the work counters");
         Assertions
                 .assertNull(progress.getByResource().get(Resource.CERTIFICATE).getTotalEstimate(),
