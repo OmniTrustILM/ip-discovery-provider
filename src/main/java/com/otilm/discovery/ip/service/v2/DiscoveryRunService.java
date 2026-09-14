@@ -254,10 +254,19 @@ public class DiscoveryRunService {
     /** Forgets the run and everything it held. A later call finds nothing, which is the contract's expected answer. */
     public void cancel(DiscoveryRunRequestDto request) {
         UUID runId = request.getRunId();
+        // Read before releasing, because releasing closes the buffer and clears it -- and what a cancel throws away
+        // is the part worth recording. Items held here were produced and never handed over, and a cancel is the one
+        // path that discards them deliberately rather than as a symptom.
+        long cursor = registry.find(runId).map(RunHandle::cursorIndex).orElse(0L);
+        long total = registry.targetsTotal(runId).orElse(0L);
+        int discarded = registry.buffer(runId).map(ResultBuffer::held).orElse(0);
+
         if (!registry.release(runId)) {
             throw new UnknownRunException(runId);
         }
-        logger.info("Run {} cancelled and forgotten", runId);
+        logger
+                .info("Run {} cancelled at cursor {} of {}, discarding {} undrained item(s)", runId, cursor, total,
+                        discarded);
     }
 
     /**
