@@ -136,7 +136,7 @@ class StopResumeSeamTest {
             @SuppressWarnings("unchecked")
             List<com.otilm.api.model.common.attribute.common.MetadataAttribute> typed =
                     (List<com.otilm.api.model.common.attribute.common.MetadataAttribute>) meta;
-            request.setMeta(typed);
+            request.setCheckpoint(typed);
         }
         return request;
     }
@@ -150,7 +150,7 @@ class StopResumeSeamTest {
             @SuppressWarnings("unchecked")
             List<com.otilm.api.model.common.attribute.common.MetadataAttribute> typed =
                     (List<com.otilm.api.model.common.attribute.common.MetadataAttribute>) meta;
-            request.setMeta(typed);
+            request.setCheckpoint(typed);
         }
         request.setAfterSequence(afterSequence);
         return request;
@@ -180,7 +180,7 @@ class StopResumeSeamTest {
         probes.release.countDown();
         var stopped = service.stop(runRequest(runId, null));
 
-        RunHandle handle = RunHandle.from(stopped.getMeta()).orElseThrow();
+        RunHandle handle = RunHandle.from(stopped.getCheckpoint()).orElseThrow();
         Assertions
                 .assertTrue(handle.sequenceHighWater() >= numbered,
                         "the checkpoint said " + handle.sequenceHighWater() + " but " + numbered

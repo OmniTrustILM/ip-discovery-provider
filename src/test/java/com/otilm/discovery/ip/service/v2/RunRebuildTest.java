@@ -101,7 +101,7 @@ class RunRebuildTest {
         request.setRunId(runId);
         request.setResources(List.of(Resource.CERTIFICATE));
         request.setAttributes(scanAttributes(hosts));
-        request.setMeta(handle.encode());
+        request.setCheckpoint(handle.encode());
         return request;
     }
 
@@ -110,7 +110,7 @@ class RunRebuildTest {
         request.setRunId(runId);
         request.setResources(List.of(Resource.CERTIFICATE));
         request.setAttributes(scanAttributes(HOSTS));
-        request.setMeta(handle.encode());
+        request.setCheckpoint(handle.encode());
         request.setAfterSequence(afterSequence);
         return request;
     }

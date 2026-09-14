@@ -99,7 +99,7 @@ class RunAdmissionTest {
         request.setRunId(runId);
         request.setResources(List.of(Resource.CERTIFICATE));
         request.setAttributes(scanAttributes(HOSTS));
-        request.setMeta(meta);
+        request.setCheckpoint(meta);
         return request;
     }
 
@@ -108,7 +108,7 @@ class RunAdmissionTest {
         request.setRunId(runId);
         request.setResources(List.of(Resource.CERTIFICATE));
         request.setAttributes(scanAttributes(HOSTS));
-        request.setMeta(meta);
+        request.setCheckpoint(meta);
         request.setAfterSequence(after);
         return request;
     }

@@ -133,7 +133,7 @@ class DiscoveryRunServiceTest {
         DiscoveryInitiateResponseDto response = service.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
 
         Assertions.assertEquals(Boolean.TRUE, response.getStoppable());
-        RunHandle handle = RunHandle.from(response.getMeta()).orElseThrow();
+        RunHandle handle = RunHandle.from(response.getCheckpoint()).orElseThrow();
         Assertions.assertEquals(RunHandle.RunState.RUNNING, handle.state());
         Assertions.assertEquals(0L, handle.cursorIndex());
 
@@ -160,7 +160,7 @@ class DiscoveryRunServiceTest {
         Assertions
                 .assertEquals(sequenceAfterFirst, registry.buffer(runId).orElseThrow().highestSequence(),
                         "a repeat must not reseed the sequence counter");
-        Assertions.assertNotNull(RunHandle.from(repeat.getMeta()).orElseThrow());
+        Assertions.assertNotNull(RunHandle.from(repeat.getCheckpoint()).orElseThrow());
     }
 
     /**
@@ -273,7 +273,7 @@ class DiscoveryRunServiceTest {
 
         var stopped = service.stop(runRequest(runId));
 
-        RunHandle handle = RunHandle.from(stopped.getMeta()).orElseThrow();
+        RunHandle handle = RunHandle.from(stopped.getCheckpoint()).orElseThrow();
         Assertions.assertEquals(RunHandle.RunState.STOPPED, handle.state());
         Assertions.assertEquals(DiscoveryRunState.STOPPED, registry.state(runId).orElseThrow());
         // This is the already-finished case, where the boundary value and the buffer counter agree anyway. The

@@ -119,6 +119,10 @@ public class DiscoveryRunService {
         registry.touch(runId);
 
         DiscoveryStatusResponseDto response = new DiscoveryStatusResponseDto();
+        // meta is left unset, which the contract reads as "no change" rather than "clear what you hold". This
+        // connector has nothing to put there: everything it knows about a run is a count, and counts belong in
+        // progress as typed fields Core can compute with. Metadata is for what only a connector knows and only a
+        // human reads, and a target sweep has none of that.
         response.setState(registry.state(runId).orElse(DiscoveryRunState.RUNNING));
         response.setHighestSequence(registry.buffer(runId).map(ResultBuffer::highestSequence).orElse(0L));
         response.setProgress(progressOf(runId));
@@ -183,7 +187,7 @@ public class DiscoveryRunService {
                 .orElseThrow(() -> new UnknownRunException(runId));
 
         DiscoveryStopResponseDto response = new DiscoveryStopResponseDto();
-        response.setMeta(stopped.encode());
+        response.setCheckpoint(stopped.encode());
         return response;
     }
 
@@ -251,7 +255,7 @@ public class DiscoveryRunService {
      */
     private RunHandle rebuild(DiscoveryV2ScopedRequestDto request) {
         UUID runId = request.getRunId();
-        RunHandle handle = RunHandle.from(request.getMeta()).orElseThrow(() -> new UnknownRunException(runId));
+        RunHandle handle = RunHandle.from(request.getCheckpoint()).orElseThrow(() -> new UnknownRunException(runId));
         if (handle.state() != RunHandle.RunState.STOPPED) {
             throw new UnknownRunException(runId);
         }
@@ -312,7 +316,7 @@ public class DiscoveryRunService {
      */
     private void rebuildForDrain(DiscoveryDrainRequestDto request) {
         UUID runId = request.getRunId();
-        RunHandle handle = RunHandle.from(request.getMeta()).orElseThrow(() -> new UnknownRunException(runId));
+        RunHandle handle = RunHandle.from(request.getCheckpoint()).orElseThrow(() -> new UnknownRunException(runId));
         if (request.getAfterSequence() != handle.sequenceHighWater()) {
             logger
                     .warn("Refusing to serve rebuilt run {}: Core is at sequence {} and the checkpoint at {}", runId,
@@ -436,7 +440,7 @@ public class DiscoveryRunService {
 
     private static DiscoveryInitiateResponseDto accepted(RunHandle handle) {
         DiscoveryInitiateResponseDto response = new DiscoveryInitiateResponseDto();
-        response.setMeta(handle.encode());
+        response.setCheckpoint(handle.encode());
         // Stop is honoured per run rather than declared once: this connector can always stop, because its scan is
         // interruptible.
         response.setStoppable(true);

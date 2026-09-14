@@ -97,8 +97,8 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
     }
 
     /**
-     * Reads the checkpoint out of a replayed {@code meta}. Other attributes alongside it are left alone: Core is free
-     * to carry its own, and a connector that choked on them would break the day it did.
+     * Reads the checkpoint out of a replayed {@code checkpoint} list. Other attributes alongside it are left alone:
+     * Core is free to carry its own, and a connector that choked on them would break the day it did.
      *
      * @return empty when no checkpoint is present, which is the initiate case rather than an error
      * @throws ValidationException if the checkpoint is present but unreadable
