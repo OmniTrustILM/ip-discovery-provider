@@ -102,6 +102,9 @@ public class DiscoveryRunService {
             }
         }
 
+        logger
+                .info("Run {} initiated: {} targets over {}, parallelism {}", runId, targets.size(),
+                        request.getResources().stream().map(Resource::getCode).toList(), parallelism);
         start(runId, targets, handle, parallelism, request.getResources());
         return accepted(handle);
     }
@@ -150,6 +153,12 @@ public class DiscoveryRunService {
                 .page(request.getAfterSequence(), request.getMaxItems() == null ? 500 : request.getMaxItems(),
                         request.getMaxBytes() == null ? 5L * 1024 * 1024 : request.getMaxBytes());
 
+        if (!page.items().isEmpty()) {
+            logger
+                    .info("Run {} handed over {} items above sequence {}{}, {} still held", runId, page.items().size(),
+                            request.getAfterSequence(), page.more() ? " (more to come)" : "", buffer.held());
+        }
+
         DiscoveryResultsResponseDto response = new DiscoveryResultsResponseDto();
         response.setItems(page.items());
         response.setHighestSequence(page.highestSequence());
@@ -185,6 +194,11 @@ public class DiscoveryRunService {
         RunHandle stopped = registry
                 .update(runId, handle -> handle.stoppedAt(Math.max(highWater, handle.sequenceHighWater())))
                 .orElseThrow(() -> new UnknownRunException(runId));
+
+        logger
+                .info("Run {} stopped at cursor {} of {}, checkpoint sequence {}, {} items still held", runId,
+                        stopped.cursorIndex(), registry.targetsTotal(runId).orElse(0L), stopped.sequenceHighWater(),
+                        registry.buffer(runId).map(ResultBuffer::held).orElse(0));
 
         DiscoveryStopResponseDto response = new DiscoveryStopResponseDto();
         response.setCheckpoint(stopped.encode());
@@ -224,6 +238,9 @@ public class DiscoveryRunService {
             RunHandle running = registry
                     .update(runId, current -> current.withState(RunHandle.RunState.RUNNING))
                     .orElseThrow(() -> new UnknownRunException(runId));
+            logger
+                    .info("Run {} resumed from cursor {} of {}, continuing sequences above {}", runId,
+                            running.cursorIndex(), targets.size(), running.sequenceHighWater());
             start(runId, targets, running, parallelism, request.getResources());
             return accepted(running);
         } catch (RuntimeException e) {
