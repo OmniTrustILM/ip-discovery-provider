@@ -248,7 +248,13 @@ public class ScanRunner {
                     return new RunHandle(handle.state(), cursor, buffer.highestSequence(), handle.targetsDigest(),
                             handle.targetsProcessed() + tally.processed.get(),
                             handle.targetsFailed() + tally.failed.get(), Map.copyOf(yield));
-                });
+                })
+                .ifPresent(committed -> logger
+                        // At info, and per chunk rather than per target. A wide sweep is slow and quiet -- a /20 at
+                        // the default parallelism is twenty minutes -- and without this the connector shows no sign
+                        // of life between the run starting and the run ending.
+                        .info("Run {} at {}/{} targets ({} failed), {} items held", runId, committed.cursorIndex(),
+                                targets.size(), committed.targetsFailed(), buffer.held()));
     }
 
     private static void counted(ChunkTally tally, Resource resource) {
