@@ -70,6 +70,17 @@ public class ScanRunner {
     private final AtomicBoolean stopping = new AtomicBoolean();
     /** A bound the run cannot continue past. Held so the scan ends deliberately rather than as a failed target. */
     private final AtomicReference<RuntimeException> fatal = new AtomicReference<>();
+
+    /**
+     * The chunk being scanned right now, readable while it runs.
+     *
+     * <p>
+     * The checkpoint only advances at a boundary, and must: counting per target would double-count the interrupted
+     * chunk when a resumed run scans it again, letting a stop inflate its own run. Progress has no such obligation —
+     * it is advisory, recomputed on every read — so it reports the committed figure plus whatever this chunk has
+     * done, and moves on every poll instead of once per 256 targets.
+     */
+    private final AtomicReference<ChunkTally> inFlightChunk = new AtomicReference<>();
     private final List<Future<?>> inFlight = new ArrayList<>();
 
     public ScanRunner(UUID runId, TargetEnumeration targets, ResultBuffer buffer, RunRegistry registry,
@@ -112,6 +123,7 @@ public class ScanRunner {
                     return false;
                 }
                 cursor = chunkEnd;
+                inFlightChunk.set(null);
                 commit(cursor, tally);
             }
         }
@@ -147,9 +159,22 @@ public class ScanRunner {
         return stopping.get();
     }
 
+    /** Targets finished inside the chunk in flight, not yet in the checkpoint. */
+    public long inFlightProcessed() {
+        ChunkTally tally = inFlightChunk.get();
+        return tally == null ? 0L : tally.processed.get();
+    }
+
+    /** Failures among them, counted within the processed figure above rather than beside it. */
+    public long inFlightFailed() {
+        ChunkTally tally = inFlightChunk.get();
+        return tally == null ? 0L : tally.failed.get();
+    }
+
     /** @return the chunk's tally, or null if a stop interrupted it before every probe finished */
     private ChunkTally runChunk(ExecutorService probes, Semaphore concurrency, long from, long to) {
         ChunkTally tally = new ChunkTally();
+        inFlightChunk.set(tally);
         List<Future<?>> futures = new ArrayList<>();
         synchronized (inFlight) {
             inFlight.clear();
@@ -177,6 +202,7 @@ public class ScanRunner {
                 complete = false;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                inFlightChunk.set(null);
                 return null;
             } catch (java.util.concurrent.ExecutionException e) {
                 // A probe that threw has already been counted as failed; the run continues.
@@ -184,7 +210,13 @@ public class ScanRunner {
             }
         }
         raiseIfFatal();
-        return complete && !stopping.get() ? tally : null;
+        if (!complete || stopping.get()) {
+            // The chunk is being abandoned. Its work is not in the checkpoint and never will be, so it must stop
+            // counting towards progress too, or a stopped run would keep reporting work it is about to redo.
+            inFlightChunk.set(null);
+            return null;
+        }
+        return tally;
     }
 
     private void probe(String url, Semaphore concurrency, ChunkTally tally) {

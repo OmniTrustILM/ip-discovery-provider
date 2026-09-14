@@ -353,12 +353,18 @@ public class DiscoveryRunService {
             return null;
         }
 
+        // The checkpoint plus whatever the chunk in flight has finished. The checkpoint advances only at a chunk
+        // boundary, which for a wide sweep at low parallelism is minutes apart, so reporting it alone leaves a
+        // working run looking frozen between boundaries.
+        long inFlightProcessed = registry.runner(runId).map(ScanRunner::inFlightProcessed).orElse(0L);
+        long inFlightFailed = registry.runner(runId).map(ScanRunner::inFlightFailed).orElse(0L);
+
         DiscoveryProgressDto progress = new DiscoveryProgressDto();
         progress.setTargetsTotal(total);
-        progress.setTargetsProcessed(handle.targetsProcessed());
+        progress.setTargetsProcessed(handle.targetsProcessed() + inFlightProcessed);
         // Counted within processed rather than beside it, so an all-failed sweep still reaches 100 per cent. A run
         // that reached every target and found nothing listening is complete, not degraded.
-        progress.setTargetsFailed(handle.targetsFailed());
+        progress.setTargetsFailed(handle.targetsFailed() + inFlightFailed);
         // Named only when it explains a run that looks stalled; a phase on a healthy run is noise Core would keep.
         progress.setPhase(budget.isBackpressured() ? "backpressured" : null);
 
