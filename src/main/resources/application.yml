@@ -10,6 +10,20 @@ discovery:
     connect-timeout-ms: ${DISCOVERY_PROBE_CONNECT_TIMEOUT_MS:300}
     read-timeout-ms: ${DISCOVERY_PROBE_READ_TIMEOUT_MS:2000}
     total-timeout-ms: ${DISCOVERY_PROBE_TOTAL_TIMEOUT_MS:10000}
+  buffer:
+    # The undrained results of the live runs on this node. Production blocks when a bound is reached rather than
+    # dropping items, which is safe because Core drains from initiate onward; a wait longer than
+    # backpressure-wait-ms fails the run naming the bound it hit. All must be positive.
+    max-runs: ${DISCOVERY_BUFFER_MAX_RUNS:8}
+    max-items-per-run: ${DISCOVERY_BUFFER_MAX_ITEMS_PER_RUN:50000}
+    max-bytes-per-run: ${DISCOVERY_BUFFER_MAX_BYTES_PER_RUN:134217728}
+    max-total-bytes: ${DISCOVERY_BUFFER_MAX_TOTAL_BYTES:536870912}
+    backpressure-wait-ms: ${DISCOVERY_BUFFER_BACKPRESSURE_WAIT_MS:120000}
+  run:
+    # The connector's own deadline, measured as time since the platform last drove the run. Core's cleanup after a
+    # failed start is best-effort, so without this an orphaned scan holds its buffer and threads until a restart.
+    idle-deadline-ms: ${DISCOVERY_RUN_IDLE_DEADLINE_MS:1800000}
+    reaper-interval-ms: ${DISCOVERY_RUN_REAPER_INTERVAL_MS:60000}
 server:
   port: ${PORT:8080}
 spring:
