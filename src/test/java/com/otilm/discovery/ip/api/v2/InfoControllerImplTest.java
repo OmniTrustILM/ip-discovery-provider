@@ -59,6 +59,18 @@ class InfoControllerImplTest {
                         "Core rejects a connector missing any mandatory interface; advertised: " + advertised);
     }
 
+    /** The same validation also demands one functional interface beside the mandatory common ones. */
+    @Test
+    void advertisesAFunctionalInterface() {
+        Assertions
+                .assertTrue(
+                        advertised()
+                                .stream()
+                                .anyMatch(code -> code
+                                        .getCategory() == ConnectorInterface.InterfaceCategory.FUNCTIONAL),
+                        "Core rejects a connector that implements only common interfaces");
+    }
+
     /**
      * The metrics API is versioned independently of the connector interface hosting it: {@code MetricsController}
      * maps to {@code /v1/metrics} and its {@code METRICS_CONFIG} carries {@code version=1}, while info and health map
@@ -77,6 +89,7 @@ class InfoControllerImplTest {
         Assertions.assertEquals("v2", declarationOf(ConnectorInterface.INFO).getVersion());
         Assertions.assertEquals("v2", declarationOf(ConnectorInterface.HEALTH).getVersion());
         Assertions.assertEquals("v2", declarationOf(ConnectorInterface.ATTRIBUTES).getVersion());
+        Assertions.assertEquals("v2", declarationOf(ConnectorInterface.DISCOVERY).getVersion());
     }
 
     /**
@@ -86,5 +99,21 @@ class InfoControllerImplTest {
     @Test
     void advertisesTheAttributeInterfaceItServes() {
         Assertions.assertTrue(advertised().contains(ConnectorInterface.ATTRIBUTES));
+    }
+
+    /**
+     * Stop and resume are advertised because a stopped run survives the connector restarting: the scan is
+     * interruptible, the checkpoint travels in the run's meta, and a run this node no longer holds is rebuilt from
+     * it. Streaming is not, and must not be — Core has no stream client, so the flag would promise a path nothing
+     * uses and the endpoint answers as unsupported.
+     */
+    @Test
+    void advertisesStopAndResumeButNotStreaming() {
+        List<FeatureFlag> features = declarationOf(ConnectorInterface.DISCOVERY).getFeatures();
+
+        Assertions.assertEquals(List.of(FeatureFlag.DISCOVERY_STOP_RESUME), features);
+        Assertions
+                .assertFalse(features.contains(FeatureFlag.DISCOVERY_STREAMING),
+                        "streaming is unimplemented, so advertising it would be a false claim");
     }
 }
