@@ -5,6 +5,9 @@ import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.attribute.RequestAttributeV2;
 import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.BaseAttribute;
+import com.otilm.api.model.common.attribute.common.DataAttribute;
+import com.otilm.api.model.common.attribute.common.constraint.RangeAttributeConstraint;
+import com.otilm.api.model.common.attribute.v2.InfoAttributeV2;
 import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
 import com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2;
 import com.otilm.api.model.common.attribute.v2.content.BooleanAttributeContentV2;
@@ -226,5 +229,33 @@ class AttributeServiceImplTest {
         attributes.add(parallelExecutions(0));
 
         Assertions.assertThrows(ValidationException.class, () -> attributeService.validateAttributes(KIND, attributes));
+    }
+
+    /**
+     * The help text stated a maximum of 1000 while the range constraint and the description both said 100, so an
+     * operator reading the guidance was told a value the connector would refuse. The two are asserted against each
+     * other rather than against a literal, so the next change to the bound cannot leave the prose behind.
+     */
+    @Test
+    void quotesTheSameParallelismMaximumInTheHelpTextAsTheConstraintEnforces() {
+        List<BaseAttribute> attributes = attributeService.getAttributes(KIND);
+
+        RangeAttributeConstraint constraint = attributes
+                .stream()
+                .filter(a -> AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME.equals(a.getName()))
+                .map(a -> (RangeAttributeConstraint) ((DataAttribute) a).getConstraints().get(0))
+                .findFirst()
+                .orElseThrow();
+        String help = attributes
+                .stream()
+                .filter(a -> AttributeServiceImpl.INFO_ATTRIBUTE_IP_HOSTNAME_NAME.equals(a.getName()))
+                .map(a -> (String) ((InfoAttributeV2) a).getContent().get(0).getData())
+                .findFirst()
+                .orElseThrow();
+
+        String maximum = String.valueOf(constraint.getData().getTo().intValue());
+        Assertions
+                .assertTrue(help.contains("`" + maximum + "`"),
+                        "the help text must quote the enforced maximum of " + maximum + ": " + help);
     }
 }

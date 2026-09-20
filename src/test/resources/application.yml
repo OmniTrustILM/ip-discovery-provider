@@ -12,3 +12,20 @@ spring:
     username: sa
   flyway:
     enabled: false
+
+# This file shadows the shipped application.yml rather than extending it, so the metrics wiring has to be repeated
+# here for MetricsEndpointTest to have an endpoint to scrape. Keep the two in step.
+management:
+  endpoints:
+    web:
+      base-path: '/'
+      exposure:
+        include: health, prometheus
+      path-mapping:
+        prometheus: v1/metrics
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2500ms, 5s, 10s

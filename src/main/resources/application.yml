@@ -35,8 +35,19 @@ management:
     web:
       base-path: '/'
       exposure:
-        include: health
+        include: health, prometheus
+      path-mapping:
+        # MetricsController maps to /v1/metrics -- the metrics API carries its own version, independent of the
+        # connector interface version. Health is not mapped here: HealthControllerImpl already serves /v2/health.
+        prometheus: v1/metrics
   endpoint:
     health:
       probes:
         enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      # The boundaries MetricsController.METRICS_CONFIG prescribes as http_server_latency_buckets_seconds.
+      slo:
+        http.server.requests: 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2500ms, 5s, 10s

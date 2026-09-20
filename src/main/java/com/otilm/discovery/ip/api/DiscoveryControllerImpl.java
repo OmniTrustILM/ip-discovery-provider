@@ -20,6 +20,12 @@ import java.io.IOException;
  * Controller class for all certificate discovery operations.
  * The certificate discovery including all the methods
  */
+/**
+ * @deprecated by the v2 discovery operation surface at {@code /v2/discoveryProvider/discoveries}, which adds stop,
+ *             resume and cancel and reports progress as a run proceeds. Both surfaces serve until the platform-level
+ *             sunset, so this one keeps working unchanged.
+ */
+@Deprecated(since = "2.20.0", forRemoval = true)
 @RestController
 public class DiscoveryControllerImpl implements DiscoveryController {
 	
