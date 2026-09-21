@@ -3,15 +3,21 @@ package com.otilm.discovery.ip.service.v2;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
 class RunRegistryTest {
@@ -196,5 +202,166 @@ class RunRegistryTest {
 
         Assertions.assertEquals(0, budget.openRuns());
         Assertions.assertTrue(budget.open(UUID.randomUUID()), "the slot must be free for the next run");
+    }
+
+    // --- state ---
+
+    /** A registered run is running: nothing else would be true of a run Core has just been told to start. */
+    @Test
+    void startsARegisteredRunInTheRunningState() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        Assertions.assertEquals(DiscoveryRunState.RUNNING, registry.state(runId).orElseThrow());
+        Assertions.assertEquals(Optional.empty(), registry.state(UUID.randomUUID()));
+    }
+
+    @Test
+    void movesARunBetweenStates() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        registry.setState(runId, DiscoveryRunState.STOPPED);
+
+        Assertions.assertEquals(DiscoveryRunState.STOPPED, registry.state(runId).orElseThrow());
+    }
+
+    /**
+     * The transition is the lock. Two resumes both reading STOPPED and both starting a scan would put two
+     * sequencers on one run, so only the caller that performs the move may act on it.
+     */
+    @Test
+    void transitionsOnlyFromTheStateTheCallerBelievedItWasIn() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+        registry.setState(runId, DiscoveryRunState.STOPPED);
+
+        Assertions
+                .assertTrue(registry
+                        .compareAndSetState(runId, DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING));
+        Assertions
+                .assertFalse(
+                        registry.compareAndSetState(runId, DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING),
+                        "the second caller lost the race and must not also start a scan");
+        Assertions
+                .assertFalse(registry
+                        .compareAndSetState(UUID.randomUUID(), DiscoveryRunState.STOPPED,
+                                DiscoveryRunState.RUNNING),
+                        "a run this node does not hold cannot be transitioned");
+    }
+
+    // --- what the run knows about itself ---
+
+    /** Zero is not a total. Reporting it as one would read as a finished run rather than one still counting. */
+    @Test
+    void reportsAnUnknownTargetTotalAsAbsentRatherThanZero() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        Assertions.assertEquals(Optional.empty(), registry.targetsTotal(runId));
+
+        registry.setTargetsTotal(runId, 4094);
+
+        Assertions.assertEquals(4094L, registry.targetsTotal(runId).orElseThrow());
+    }
+
+    @Test
+    void handsBackWhatWasAttachedToTheRun() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+        ResultBuffer buffer = new ResultBuffer(runId, new BufferBudget(1, 100, 1L << 30, 1L << 31, 30_000), 0);
+
+        Assertions.assertEquals(Optional.empty(), registry.buffer(runId), "nothing is attached yet");
+        Assertions.assertEquals(Optional.empty(), registry.runner(runId));
+
+        registry.attach(runId, null, buffer);
+
+        Assertions.assertSame(buffer, registry.buffer(runId).orElseThrow());
+    }
+
+    // --- the scan in flight ---
+
+    /**
+     * A stop waits for the scan so it does not checkpoint while items are still being numbered. The wait is bounded
+     * because a stop interrupts rather than quiesces: it is waiting for threads to unwind, not for probes to finish.
+     */
+    @Test
+    void waitsForAScanToFinishAndSaysSoWhenItDoesNot() throws Exception {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        Assertions
+                .assertTrue(registry.awaitScan(runId, Duration.ofMillis(50)),
+                        "a run with no scan attached has nothing to wait for");
+
+        registry.attachScan(runId, CompletableFuture.completedFuture(null));
+        Assertions.assertTrue(registry.awaitScan(runId, Duration.ofSeconds(5)));
+
+        CountDownLatch release = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            Future<?> stuck = executor.submit(() -> release.await(10, TimeUnit.SECONDS));
+            registry.attachScan(runId, stuck);
+
+            Assertions
+                    .assertFalse(registry.awaitScan(runId, Duration.ofMillis(100)),
+                            "a scan that outlasts the window is reported, not hidden");
+            release.countDown();
+        }
+    }
+
+    /** A cancelled or failed scan is no longer numbering items, which is all a stop needs to know. */
+    @Test
+    void treatsACancelledScanAsFinished() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+        CompletableFuture<?> cancelled = new CompletableFuture<>();
+        cancelled.cancel(true);
+
+        registry.attachScan(runId, cancelled);
+
+        Assertions.assertTrue(registry.awaitScan(runId, Duration.ofSeconds(5)));
+    }
+
+    // --- the rebuild verdict ---
+
+    /**
+     * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by
+     * either would otherwise have every later drain served with no cursor check at all.
+     */
+    @Test
+    void carriesTheRebuildVerdictUntilADrainSettlesIt() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        Assertions.assertEquals(Optional.empty(), registry.drainVerificationOwed(runId));
+
+        registry.oweDrainVerification(runId, 40);
+
+        Assertions.assertEquals(40L, registry.drainVerificationOwed(runId).orElseThrow());
+
+        registry.drainVerified(runId);
+
+        Assertions.assertEquals(Optional.empty(), registry.drainVerificationOwed(runId));
+    }
+
+    // --- release ---
+
+    /**
+     * A cancel and the deadline both come through here, and a run that is gone must leave nothing charged: the slot
+     * it held is what the next run is refused for.
+     */
+    @Test
+    void releaseHandsBackEverythingTheRunHeld() {
+        BufferBudget budget = new BufferBudget(1, 100, 1L << 30, 1L << 31, 30_000);
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+        Assertions.assertTrue(budget.open(runId));
+        registry.attach(runId, null, new ResultBuffer(runId, budget, 0));
+
+        Assertions.assertTrue(registry.release(runId));
+
+        Assertions.assertEquals(0, registry.size());
+        Assertions.assertEquals(0, budget.openRuns());
+        Assertions.assertFalse(registry.release(runId), "a run already released is not released again");
     }
 }
