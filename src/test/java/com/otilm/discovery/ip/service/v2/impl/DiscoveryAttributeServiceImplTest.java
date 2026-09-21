@@ -345,13 +345,15 @@ class DiscoveryAttributeServiceImplTest {
 
     @Test
     void refusesAParallelismOutsideThePublishedRange() {
+        List<RequestAttribute> belowTheRange = List.of(parallelism(0));
+        List<RequestAttribute> aboveTheRange =
+                List.of(parallelism(DiscoveryAttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1));
+
         Assertions
                 .assertThrows(ValidationException.class,
-                        () -> attributeService.readParallelExecutions(List.of(parallelism(0))));
+                        () -> attributeService.readParallelExecutions(belowTheRange));
         Assertions
                 .assertThrows(ValidationException.class,
-                        () -> attributeService
-                                .readParallelExecutions(List
-                                        .of(parallelism(DiscoveryAttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1))));
+                        () -> attributeService.readParallelExecutions(aboveTheRange));
     }
 }
