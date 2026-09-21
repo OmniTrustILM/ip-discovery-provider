@@ -8,6 +8,7 @@ import com.otilm.discovery.ip.util.TargetEnumeration;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -170,7 +171,12 @@ class ScanRunnerTest {
 
         Assertions.assertFalse(scan.isAlive(), "stop must not wait for the stalled probe");
         Assertions.assertEquals(Boolean.FALSE, completed.get(), "an interrupted scan did not run to completion");
-        Assertions.assertTrue(probes.interrupted.get(), "the in-flight probe should have been interrupted");
+        // Awaited rather than read: stop cancels and returns without waiting for the probe, which is the behaviour
+        // under test, so the probe can still be unwinding when scan() has already returned.
+        Awaitility
+                .await("the in-flight probe should have been interrupted")
+                .atMost(Duration.ofSeconds(10))
+                .untilTrue(probes.interrupted);
     }
 
     /** The cursor is a chunk boundary, so an interrupted chunk leaves it where the last completed one ended. */
