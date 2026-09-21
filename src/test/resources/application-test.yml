@@ -1,0 +1,12 @@
+# Test-only overrides. The shipped src/main/resources/application.yml is the base, so the metrics exposure and the
+# /v1/metrics mapping this suite asserts on are the ones that actually ship. Only what a test cannot use is replaced.
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    password:
+    # INIT creates the schema the shipped hibernate.default_schema points at, so that setting is exercised rather
+    # than overridden away.
+    url: jdbc:h2:mem:HCE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;INIT=CREATE SCHEMA IF NOT EXISTS NETWORK
+    username: sa
+  flyway:
+    enabled: false

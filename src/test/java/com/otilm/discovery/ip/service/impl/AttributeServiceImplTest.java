@@ -232,9 +232,9 @@ class AttributeServiceImplTest {
     }
 
     /**
-     * The help text stated a maximum of 1000 while the range constraint and the description both said 100, so an
-     * operator reading the guidance was told a value the connector would refuse. The two are asserted against each
-     * other rather than against a literal, so the next change to the bound cannot leave the prose behind.
+     * Guidance that names a maximum the connector would refuse is worse than none. The help and the constraint are
+     * asserted against each other rather than against a literal, so the next change to the bound cannot leave the
+     * prose behind.
      */
     @Test
     void quotesTheSameParallelismMaximumInTheHelpTextAsTheConstraintEnforces() {

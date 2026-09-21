@@ -212,7 +212,6 @@ class DiscoveryAttributeServiceImplTest {
                         thrown.getMessage());
     }
 
-    /** A UUID the registry still carries is refused as a non-callback attribute, not reported as missing. */
     @Test
     void refusesACallbackForAKnownAttributeRatherThanCallingItMissing() {
         AttributeCallbackRequestDto request = new AttributeCallbackRequestDto();

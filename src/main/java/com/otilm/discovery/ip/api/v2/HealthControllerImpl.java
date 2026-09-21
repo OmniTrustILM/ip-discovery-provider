@@ -22,8 +22,9 @@ public class HealthControllerImpl implements HealthController {
 
     @Override
     public HealthInfo checkHealthReadiness() {
-        // Readiness is not distinguished from liveness: the connector holds no run state to warm up and no upstream
-        // to reach. It answers a scan request as soon as it answers at all.
+        // Readiness is not distinguished from liveness today: a v2 run holds no state here to warm up, since the
+        // checkpoint lives in Core. That is not the whole picture -- the process still owns a datasource and the v1
+        // repositories -- so neither probe can currently answer 503, which the contract allows for.
         return up();
     }
 

@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -56,6 +57,23 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
                 HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
+    /**
+     * A body that will not parse at all. The base class answers this one with a plain {@link ProblemDetail}, which
+     * carries no {@code errorCode} — the field Core acts on — so a malformed callback would get a different envelope
+     * from every other rejected request on this surface.
+     */
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        // The exception's own text quotes the offending JSON and names the target class, so it stays in the log.
+        LOG.error("Unreadable request body: {}", ex.getMessage(), ex);
+        return new ResponseEntity<>(
+                ProblemDetailExtended
+                        .fromErrorCode(ErrorCode.VALIDATION_FAILED, "The request body could not be read.", null,
+                                null),
+                headers, HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
     @ExceptionHandler(ValidationException.class)
     public ProblemDetail handleValidation(ValidationException ex) {
         LOG.error("Validation error occurred: {}", ex.getMessage(), ex);
@@ -77,11 +95,15 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     }
 
     /**
-     * A path variable that will not convert — a resource code naming no resource. Spring resolves this one itself,
-     * into a 400 carrying its own default body, so without a handler here a v2 caller gets a third error shape from
-     * a surface that promises problem+json. It answers 422 like every other rejected argument: the request reached
-     * the right route and named something that does not exist, which is the same failure as asking for a resource
-     * this connector does not discover.
+     * A path variable that will not convert — a resource code naming no resource.
+     *
+     * <p>
+     * <b>Status:</b> 422, not the 400 Spring would answer. The request reached the right route and named something
+     * that does not exist, which is the same failure as asking for a resource this connector does not discover.
+     *
+     * <p>
+     * <b>Error shape:</b> without a handler here Spring answers with its own default body, giving a v2 caller a
+     * third shape from a surface that promises problem+json.
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ProblemDetail handleUnconvertibleArgument(MethodArgumentTypeMismatchException ex) {
@@ -132,8 +154,8 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleEverythingElse(Exception ex) {
         // The message is logged, not returned. This is the ungated handler, so anything without a more specific
-        // mapping lands here -- SQL, host resolution and constraint text included -- and the v1 advice was changed
-        // for the same reason. The error code alone is what a caller can act on.
+        // mapping lands here -- SQL, host resolution and constraint text included. The error code alone is what a
+        // caller can act on.
         LOG.error("General error occurred: {}", ex.getMessage(), ex);
         return ProblemDetailExtended
                 .fromErrorCode(ErrorCode.INTERNAL_SERVER_ERROR, "Internal server error.", null, null);

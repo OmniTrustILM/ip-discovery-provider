@@ -5,14 +5,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 /**
- * v1 and v2 answer failures in different shapes and both surfaces serve at once. A Core that has not migrated reads
- * {@code ErrorMessageDto}; a migrated one reads problem+json. Merging the two advices, or widening either beyond its
- * own surface, breaks one of those callers, so both shapes are asserted here against the same class of failure.
+ * Asserts both error shapes against the same class of failure, so neither advice can widen beyond its own surface.
+ * The boundary itself is explained on {@link com.otilm.discovery.ip.ProblemDetailsHandlingAdvice}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ErrorModelBoundaryTest {
@@ -32,6 +33,30 @@ class ErrorModelBoundaryTest {
                                 .equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
                         "expected problem+json, got " + response.getHeaders().getContentType());
         Assertions.assertTrue(response.getBody().contains("\"status\":422"), response.getBody());
+    }
+
+    /**
+     * A body that will not parse is handled by the base class unless the advice overrides it, and that answer omits
+     * the {@code errorCode} a caller acts on. This is the only POST on the v2 surface, so it is the path where a
+     * malformed body actually arrives.
+     */
+    @Test
+    void answersAnUnreadableBodyInTheSameShapeAsEveryOtherV2Failure() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> response = rest
+                .postForEntity("/v2/attributes/callback", new HttpEntity<>("{\"attributeUuid\": ", headers),
+                        String.class);
+
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        Assertions
+                .assertTrue(
+                        response.getHeaders().getContentType()
+                                .equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
+                        "expected problem+json, got " + response.getHeaders().getContentType());
+        Assertions
+                .assertTrue(response.getBody().contains("\"errorCode\""),
+                        "the extended envelope carries the code a caller acts on: " + response.getBody());
     }
 
     @Test
@@ -61,7 +86,6 @@ class ErrorModelBoundaryTest {
         Assertions.assertEquals("[]", response.getBody());
     }
 
-    /** A path variable that is no resource at all is a rejected request, not a fault. */
     @Test
     void rejectsAPathThatNamesNoResourceAtAll() {
         ResponseEntity<String> response =

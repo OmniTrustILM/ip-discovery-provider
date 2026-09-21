@@ -41,8 +41,10 @@
 			src/main/java/com/otilm/discovery/ip/LoggingAdvice.java,
 			<!-- exception-to-status mappings; the catch-all logs and returns a fixed body -->
 			src/main/java/com/otilm/discovery/ip/ExceptionHandlingAdvice.java,
-			<!-- controllers delegate straight to the services, which are covered -->
-			src/main/java/com/otilm/discovery/ip/api/**,
+			<!-- Controllers that only delegate to a service. The rest of api/v2 is measured: those build the
+			     interface list and validate their arguments, which is logic a test has to protect. -->
+			src/main/java/com/otilm/discovery/ip/api/*.java,
+			src/main/java/com/otilm/discovery/ip/api/v2/AttributesControllerImpl.java,
 			<!-- JPA entities and their accessors -->
 			src/main/java/com/otilm/discovery/ip/dao/**,
 			<!-- data holder -->
@@ -179,6 +181,13 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<argLine>@{argLine}</argLine>
+					<systemPropertyVariables>
+						<!-- Adds src/test/resources/application-test.yml, which overrides only what a test cannot
+						     use. The shipped application.yml stays the base, so a suite that passes has exercised
+						     the configuration that ships. Included rather than activated: @ActiveProfiles replaces
+						     the active list, and several tests set their own. -->
+						<spring.profiles.include>test</spring.profiles.include>
+					</systemPropertyVariables>
 				</configuration>
 			</plugin>
 			<plugin>
