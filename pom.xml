@@ -17,6 +17,12 @@
 
 	<properties>
 		<java.version>21</java.version>
+		<!-- CVE-2026-8763 (CRITICAL) and CVE-2026-13506 (HIGH) in Bouncy Castle 1.84.
+		     Remove when the parent BOM manages at least this version. -->
+		<bouncycastle.version>1.85</bouncycastle.version>
+		<!-- CVE-2026-75595 (CRITICAL): SNI routing bypass via a fragmented TLS ClientHello.
+		     Remove when the parent BOM manages at least this version. -->
+		<netty.version>4.1.137.Final</netty.version>
 		<!-- CVE-2026-65182, CVE-2026-65905, CVE-2026-68525 (auth/constraint bypasses in embedded Tomcat).
 		     The announced fix version 10.1.58 was never published; 10.1.59 is its released successor.
 		     Remove when the parent BOM manages at least this version. -->
