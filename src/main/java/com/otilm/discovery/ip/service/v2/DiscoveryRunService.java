@@ -382,15 +382,28 @@ public class DiscoveryRunService {
         // The checkpoint plus whatever the chunk in flight has finished. The checkpoint advances only at a chunk
         // boundary, which for a wide sweep at low parallelism is minutes apart, so reporting it alone leaves a
         // working run looking frozen between boundaries.
-        long inFlightProcessed = registry.runner(runId).map(ScanRunner::inFlightProcessed).orElse(0L);
+        // Failures first. A failing probe counts itself processed before it counts itself failed, so reading in
+        // that order cannot see a failure whose processed increment has not landed yet.
         long inFlightFailed = registry.runner(runId).map(ScanRunner::inFlightFailed).orElse(0L);
+        long inFlightProcessed = registry.runner(runId).map(ScanRunner::inFlightProcessed).orElse(0L);
+
+        long processed = handle.targetsProcessed() + inFlightProcessed;
+        long failed = handle.targetsFailed() + inFlightFailed;
+        // The checkpoint and the chunk are read a moment apart, and a commit between them moves one into the other.
+        // Clamped rather than locked: this figure is advisory and recomputed on every poll, so a sample that is
+        // briefly stale costs nothing, while one reporting more targets than the run has -- or more failures than
+        // the targets they are counted within -- is a number Core would render as a percentage over 100.
+        if (total != null) {
+            processed = Math.min(processed, total);
+        }
+        failed = Math.min(failed, processed);
 
         DiscoveryProgressDto progress = new DiscoveryProgressDto();
         progress.setTargetsTotal(total);
-        progress.setTargetsProcessed(handle.targetsProcessed() + inFlightProcessed);
+        progress.setTargetsProcessed(processed);
         // Counted within processed rather than beside it, so an all-failed sweep still reaches 100 per cent. A run
         // that reached every target and found nothing listening is complete, not degraded.
-        progress.setTargetsFailed(handle.targetsFailed() + inFlightFailed);
+        progress.setTargetsFailed(failed);
         // Named only when it explains a run that looks stalled; a phase on a healthy run is noise Core would keep.
         progress.setPhase(budget.isBackpressured() ? "backpressured" : null);
 
