@@ -212,6 +212,32 @@ class DiscoveryAttributeServiceImplTest {
                         thrown.getMessage());
     }
 
+    /** A UUID the registry still carries is refused as a non-callback attribute, not reported as missing. */
+    @Test
+    void refusesACallbackForAKnownAttributeRatherThanCallingItMissing() {
+        AttributeCallbackRequestDto request = new AttributeCallbackRequestDto();
+        request.setAttributeUuid(UUID.fromString(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_UUID));
+        request.setAttributeName(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_NAME);
+
+        Assertions
+                .assertThrows(AttributeCallbackNotSupportedException.class, () -> attributeService.callback(request));
+    }
+
+    /**
+     * Core refreshes a definition it no longer recognises exactly once, on ATTRIBUTE_DEFINITION_NOT_FOUND. Answering
+     * the blanket 422 instead leaves it calling a stale registry it has no way to learn is stale, so the UUID is
+     * resolved before the callback is refused.
+     */
+    @Test
+    void reportsACallbackForAnUnknownUuidAsAMissingDefinition() {
+        AttributeCallbackRequestDto request = new AttributeCallbackRequestDto();
+        request.setAttributeUuid(UUID.fromString("00000000-0000-0000-0000-000000000000"));
+        request.setAttributeName("meta_somethingWeDroppedTwoVersionsAgo");
+
+        Assertions
+                .assertThrows(AttributeDefinitionNotFoundException.class, () -> attributeService.callback(request));
+    }
+
     // --- reading a run's values ---
 
     private static RequestAttributeV3 request(String uuid, String name, AttributeContentType type,
@@ -252,8 +278,11 @@ class DiscoveryAttributeServiceImplTest {
 
     @Test
     void refusesARunWithNoHosts() {
-        Assertions.assertThrows(ValidationException.class, () -> attributeService.readHosts(List.of(ports("443"))));
-        Assertions.assertThrows(ValidationException.class, () -> attributeService.readHosts(List.of(hosts())));
+        List<RequestAttribute> portsOnly = List.of(ports("443"));
+        List<RequestAttribute> emptyHosts = List.of(hosts());
+
+        Assertions.assertThrows(ValidationException.class, () -> attributeService.readHosts(portsOnly));
+        Assertions.assertThrows(ValidationException.class, () -> attributeService.readHosts(emptyHosts));
     }
 
     /**
@@ -262,9 +291,10 @@ class DiscoveryAttributeServiceImplTest {
      */
     @Test
     void namesTheHostEntryThatIsWrongRatherThanTheWholeValue() {
+        List<RequestAttribute> withABadEntry = List.of(hosts("10.0.0.1", "10.0.0.999", "10.0.0.3"));
+
         ValidationException thrown = Assertions
-                .assertThrows(ValidationException.class,
-                        () -> attributeService.readHosts(List.of(hosts("10.0.0.1", "10.0.0.999", "10.0.0.3"))));
+                .assertThrows(ValidationException.class, () -> attributeService.readHosts(withABadEntry));
 
         Assertions.assertTrue(thrown.getMessage().contains("10.0.0.999"), thrown.getMessage());
         Assertions
@@ -274,9 +304,10 @@ class DiscoveryAttributeServiceImplTest {
 
     @Test
     void namesThePortEntryThatIsWrong() {
+        List<RequestAttribute> withABadEntry = List.of(ports("443", "443-80"));
+
         ValidationException thrown = Assertions
-                .assertThrows(ValidationException.class,
-                        () -> attributeService.readPorts(List.of(ports("443", "443-80"))));
+                .assertThrows(ValidationException.class, () -> attributeService.readPorts(withABadEntry));
 
         Assertions.assertTrue(thrown.getMessage().contains("443-80"), thrown.getMessage());
     }

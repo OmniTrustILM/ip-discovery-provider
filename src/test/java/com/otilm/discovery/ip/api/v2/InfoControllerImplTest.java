@@ -76,5 +76,15 @@ class InfoControllerImplTest {
     void declaresTheConnectorInterfacesAtV2() {
         Assertions.assertEquals("v2", declarationOf(ConnectorInterface.INFO).getVersion());
         Assertions.assertEquals("v2", declarationOf(ConnectorInterface.HEALTH).getVersion());
+        Assertions.assertEquals("v2", declarationOf(ConnectorInterface.ATTRIBUTES).getVersion());
+    }
+
+    /**
+     * The list is what a consumer reads to know which interfaces exist. This connector mounts the whole v2 attribute
+     * surface, so omitting it reports an implemented interface as absent.
+     */
+    @Test
+    void advertisesTheAttributeInterfaceItServes() {
+        Assertions.assertTrue(advertised().contains(ConnectorInterface.ATTRIBUTES));
     }
 }

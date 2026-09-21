@@ -41,8 +41,9 @@ public class InfoControllerImpl implements InfoController {
         InfoResponse response = new InfoResponse();
         response.setConnector(connector);
         response
-                .setInterfaces(
-                        List.of(declare(ConnectorInterface.INFO), declare(ConnectorInterface.HEALTH), metrics()));
+                .setInterfaces(List
+                        .of(declare(ConnectorInterface.INFO), declare(ConnectorInterface.HEALTH),
+                                declare(ConnectorInterface.ATTRIBUTES), metrics()));
         return response;
     }
 

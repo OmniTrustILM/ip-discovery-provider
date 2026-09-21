@@ -15,6 +15,9 @@ import java.util.List;
  * not; this asserts that predicate directly, since no springdoc web starter is on the classpath to serve a document
  * to inspect instead.
  */
+// The v1 controllers are @Deprecated(forRemoval = true) and naming them is the assertion, so the warning about
+// calling them is inverted here.
+@SuppressWarnings("removal")
 class V1DeprecationTest {
 
     private static List<Method> handlerMethods(Class<?> controller) {

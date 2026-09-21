@@ -39,6 +39,8 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
 
     private static final Logger LOG = LoggerFactory.getLogger(ProblemDetailsHandlingAdvice.class);
 
+    private static final int VALUE_ECHO_LIMIT = 64;
+
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
@@ -60,12 +62,18 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
         return ProblemDetailExtended.fromErrorCode(ErrorCode.VALIDATION_FAILED, ex.getMessage(), null, null);
     }
 
+    /**
+     * Mapped so a rejected argument does not fall through to the catch-all and become a 500. The message is withheld:
+     * this connector's own validators wrap their {@link IllegalArgumentException} into a {@link ValidationException}
+     * carrying our prose, so anything arriving here came from a library and describes internals rather than the
+     * request.
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
-        // The scan-spec parser raises this for a malformed port; on the v2 surface it is a rejected request rather
-        // than a fault, so it must not fall through to the catch-all and become a 500.
         LOG.error("Invalid argument: {}", ex.getMessage(), ex);
-        return ProblemDetailExtended.fromErrorCode(ErrorCode.VALIDATION_FAILED, ex.getMessage(), null, null);
+        return ProblemDetailExtended
+                .fromErrorCode(ErrorCode.VALIDATION_FAILED, "The request carried an argument this connector "
+                        + "could not accept.", null, null);
     }
 
     /**
@@ -78,9 +86,16 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ProblemDetail handleUnconvertibleArgument(MethodArgumentTypeMismatchException ex) {
         LOG.error("Invalid path variable {}: {}", ex.getName(), ex.getMessage(), ex);
-        // The cause carries the converter's own message, which names the value and the enum it failed to match.
-        String detail = ex.getMostSpecificCause().getMessage();
+        // Built from the caller's own value and our parameter name rather than from the converter's message, which
+        // names the target type in full -- "No enum constant com.otilm.api.model.core.auth.Resource.wibble".
+        String detail = "The value " + quoted(ex.getValue()) + " is not valid for " + ex.getName() + ".";
         return ProblemDetailExtended.fromErrorCode(ErrorCode.VALIDATION_FAILED, detail, null, null);
+    }
+
+    /** Bounded because the value is whatever the caller put in the path, and it is going back out in a response. */
+    private static String quoted(Object value) {
+        String text = String.valueOf(value);
+        return '"' + (text.length() <= VALUE_ECHO_LIMIT ? text : text.substring(0, VALUE_ECHO_LIMIT) + "...") + '"';
     }
 
     @ExceptionHandler(AttributeDefinitionNotFoundException.class)
@@ -102,10 +117,16 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
         return ProblemDetailExtended.fromErrorCode(ErrorCode.RESOURCE_NOT_FOUND, ex.getMessage(), null, null);
     }
 
+    /**
+     * The code is what a caller acts on. The message is withheld for the same reason as the other generic handlers:
+     * any library can raise this, and a route that needs to say more should raise an exception of its own.
+     */
     @ExceptionHandler(UnsupportedOperationException.class)
     public ProblemDetail handleUnsupported(UnsupportedOperationException ex) {
         LOG.error("Operation not supported: {}", ex.getMessage(), ex);
-        return ProblemDetailExtended.fromErrorCode(ErrorCode.OPERATION_NOT_SUPPORTED, ex.getMessage(), null, null);
+        return ProblemDetailExtended
+                .fromErrorCode(ErrorCode.OPERATION_NOT_SUPPORTED, "This operation is not supported by this "
+                        + "connector.", null, null);
     }
 
     @ExceptionHandler(Exception.class)

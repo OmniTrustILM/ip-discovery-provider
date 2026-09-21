@@ -100,7 +100,16 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
      */
     @Override
     public AttributeCallbackResponseDto callback(AttributeCallbackRequestDto request) {
-        throw new AttributeCallbackNotSupportedException(request == null ? null : request.getAttributeName());
+        if (request == null) {
+            throw new AttributeCallbackNotSupportedException(null);
+        }
+        // Resolved before the refusal so an unknown UUID answers 404 rather than 422. Core refreshes a definition it
+        // no longer recognises exactly once, on ATTRIBUTE_DEFINITION_NOT_FOUND; told 422 instead it keeps calling
+        // with a registry it does not know is stale.
+        if (request.getAttributeUuid() != null) {
+            getDefinition(request.getAttributeUuid());
+        }
+        throw new AttributeCallbackNotSupportedException(request.getAttributeName());
     }
 
     @Override
