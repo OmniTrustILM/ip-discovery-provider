@@ -58,7 +58,8 @@ class V1DeprecationTest {
                 .of(com.otilm.discovery.ip.api.v2.InfoControllerImpl.class,
                         com.otilm.discovery.ip.api.v2.HealthControllerImpl.class,
                         com.otilm.discovery.ip.api.v2.DiscoveryMetadataControllerImpl.class,
-                        com.otilm.discovery.ip.api.v2.AttributesControllerImpl.class);
+                        com.otilm.discovery.ip.api.v2.AttributesControllerImpl.class,
+                        com.otilm.discovery.ip.api.v2.DiscoveryOperationControllerImpl.class);
 
         for (Class<?> controller : v2) {
             for (Method operation : handlerMethods(controller)) {
