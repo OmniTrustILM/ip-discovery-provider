@@ -15,6 +15,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * @deprecated by {@code DiscoveryMetadataControllerImpl}, which serves the same schema at
+ *             {@code /v2/discoveryProvider/attributes} without a kind, and validates a run's attributes at initiate
+ *             rather than through a call of its own. Both surfaces serve until the platform-level sunset, so this one
+ *             keeps working unchanged.
+ */
+@Deprecated(since = "2.20.0", forRemoval = true)
 @RestController
 @RequestMapping("/v1/discoveryProvider/{kind}/attributes")
 public class AttributesControllerImpl implements AttributesController {

@@ -13,6 +13,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * @deprecated by {@code com.otilm.discovery.ip.api.v2.InfoControllerImpl}, which describes the connector by
+ *             interface rather than by function group. Both surfaces serve until the platform-level sunset, so this
+ *             one keeps working unchanged.
+ */
+@Deprecated(since = "2.20.0", forRemoval = true)
 @RestController
 public class InfoControllerImpl implements InfoController {
     private static final Logger logger = LoggerFactory.getLogger(InfoControllerImpl.class);

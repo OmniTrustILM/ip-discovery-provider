@@ -119,11 +119,11 @@ public class AttributeServiceImpl implements AttributeService {
     public List<BaseAttribute> getAttributes(String kind) {
         logger.debug("Getting the attributes for {}", kind);
 
-        List<BaseAttribute> attributes = new ArrayList<>();
-
         // Rejects an unknown kind with ValidationException, the same way validateAttributes does,
         // so the controller answers a bad kind with 422 rather than falling through to a 500.
         validateKind(kind);
+
+        List<BaseAttribute> attributes = new ArrayList<>();
 
         attributes.add(createIpHostnameInfoAttribute());
         attributes.add(createDiscoveryIpDataAttribute());
@@ -166,7 +166,7 @@ public class AttributeServiceImpl implements AttributeService {
                 and avoiding network issues.*
                 
                 By default, each URL is processed sequentially. The number of parallel executions can be increased
-                to improve the performance. The maximum number of parallel executions that can be set is `1000`.
+                to improve the performance. The maximum number of parallel executions that can be set is `100`.
                 """;
 
         attribute.setContent(List.of(new TextAttributeContentV2(content)));
