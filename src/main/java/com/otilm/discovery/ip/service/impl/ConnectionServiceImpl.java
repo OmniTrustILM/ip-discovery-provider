@@ -38,7 +38,7 @@ public class ConnectionServiceImpl implements ConnectionService {
     private final int readTimeoutMs;
     private final int totalTimeoutMs;
 
-    public ConnectionServiceImpl(@Value("${discovery.probe.connect-timeout-ms:300}") int connectTimeoutMs,
+    public ConnectionServiceImpl(@Value("${discovery.probe.connect-timeout-ms:500}") int connectTimeoutMs,
             @Value("${discovery.probe.read-timeout-ms:2000}") int readTimeoutMs,
             @Value("${discovery.probe.total-timeout-ms:10000}") int totalTimeoutMs) {
         // Java reads a timeout of zero as "wait forever", so a zero here would silently restore the unbounded
