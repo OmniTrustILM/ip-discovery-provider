@@ -85,10 +85,9 @@ public class RunRegistry {
      * Publishes a rebuilt run complete, in one step.
      *
      * <p>
-     * A rebuilt entry is only safe to observe once its state, its buffer and the drain verification it owes are all
-     * set. Registered empty and filled afterwards, it is briefly visible as a running run that owes no cursor check
-     * — and that check is the only thing stopping a rebuilt run from serving across a hole. A concurrent resume can
-     * also create a buffer in the gap, which the filling call would then overwrite.
+     * Registered empty and filled afterwards, it is briefly visible as a running run owing no cursor check — the
+     * check that stops a rebuilt run serving across a hole. A concurrent resume can also create a buffer in that
+     * gap, which the filling call would overwrite.
      *
      * @return false if the run is already registered, which the caller answers from the entry that is already there
      */

@@ -260,7 +260,10 @@ class DiscoveryRunServiceTest {
         DiscoveryResultsResponseDto results = service.results(late);
 
         Assertions.assertTrue(results.getItems().isEmpty());
-        Assertions.assertEquals(4L, results.getHighestSequence());
+        Assertions
+                .assertEquals(3L, results.getHighestSequence(),
+                        "an empty page vouches for the acknowledged cursor, not for items it is still holding");
+        Assertions.assertEquals(Boolean.TRUE, results.getMore(), "sequence 4 is still here");
     }
 
     // --- stop, resume, cancel ---
