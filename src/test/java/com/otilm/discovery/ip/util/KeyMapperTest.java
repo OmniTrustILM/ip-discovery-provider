@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.HexFormat;
+import java.util.Locale;
 
 class KeyMapperTest {
 
@@ -159,4 +160,35 @@ class KeyMapperTest {
                 Assertions.assertThrows(InvocationTargetException.class, constructor::newInstance);
         Assertions.assertInstanceOf(IllegalStateException.class, thrown.getCause());
     }
+
+    /**
+     * Upper-casing with the default locale turns "Dilithium" into a dotted-I form under tr and az, which matches
+     * nothing and reports a recognised algorithm as UNKNOWN depending on where the JVM runs.
+     */
+    @Test
+    void mapsTheSameWhateverLocaleTheJvmRunsIn() {
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            Assertions.assertEquals(KeyAlgorithm.DILITHIUM, KeyMapper.algorithmOf("Dilithium"));
+            Assertions.assertEquals(KeyAlgorithm.MLDSA, KeyMapper.algorithmOf("ML-DSA"));
+        } finally {
+            Locale.setDefault(original);
+        }
+    }
+
+    /**
+     * A provider names a parameter set, not a family. Matching exactly reported every real post-quantum name as
+     * UNKNOWN, which is indistinguishable from not mapping them at all.
+     */
+    @Test
+    void mapsTheParameterSetNamesProvidersActuallyUse() {
+        Assertions.assertEquals(KeyAlgorithm.SLHDSA, KeyMapper.algorithmOf("SLH-DSA-SHA2-128F"));
+        Assertions.assertEquals(KeyAlgorithm.MLDSA, KeyMapper.algorithmOf("ML-DSA-65"));
+        Assertions.assertEquals(KeyAlgorithm.MLKEM, KeyMapper.algorithmOf("ML-KEM-768"));
+        Assertions.assertEquals(KeyAlgorithm.FALCON, KeyMapper.algorithmOf("Falcon-512"));
+        Assertions.assertEquals(KeyAlgorithm.DILITHIUM, KeyMapper.algorithmOf("CRYSTALS-Dilithium"));
+        Assertions.assertEquals(KeyAlgorithm.UNKNOWN, KeyMapper.algorithmOf("something-new"));
+    }
+
 }

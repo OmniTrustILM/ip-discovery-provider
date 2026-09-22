@@ -107,9 +107,11 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
         if (meta == null) {
             return Optional.empty();
         }
+        // Matched on the UUID, which is what identifies an attribute definition. Core is free to carry metadata of
+        // its own, and one of it sharing our name would otherwise be parsed as the checkpoint and fail the run.
         return meta
                 .stream()
-                .filter(attribute -> ATTRIBUTE_NAME.equals(attribute.getName()))
+                .filter(attribute -> ATTRIBUTE_UUID.equals(attribute.getUuid()))
                 .findFirst()
                 .map(RunHandle::readContent);
     }
@@ -123,11 +125,42 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
         if (!(data instanceof String json) || json.isBlank()) {
             throw new ValidationException("Run checkpoint content is not readable text");
         }
+        RunHandle handle;
         try {
-            return MAPPER.readValue(json, RunHandle.class);
+            handle = MAPPER.readValue(json, RunHandle.class);
         } catch (JsonProcessingException e) {
             throw new ValidationException("Run checkpoint is not readable: " + e.getOriginalMessage());
         }
+        return handle.validated();
+    }
+
+    /**
+     * What a checkpoint has to mean, not just parse as. Jackson fills a missing field with null or zero, so a
+     * truncated or hostile checkpoint reaches the scan as a negative cursor indexing the enumeration, a sequence
+     * space that runs backwards, or a null map that fails later with nothing naming the cause. The contract
+     * documents a validation failure for an unreadable checkpoint, and this is the other half of unreadable.
+     */
+    private RunHandle validated() {
+        if (state == null) {
+            throw new ValidationException("Run checkpoint names no state");
+        }
+        if (targetsDigest == null || targetsDigest.isBlank()) {
+            throw new ValidationException("Run checkpoint carries no target digest");
+        }
+        if (cursorIndex < 0 || sequenceHighWater < 0 || targetsProcessed < 0 || targetsFailed < 0) {
+            throw new ValidationException("Run checkpoint counts backwards: cursor " + cursorIndex + ", sequence "
+                    + sequenceHighWater + ", processed " + targetsProcessed + ", failed " + targetsFailed);
+        }
+        if (targetsFailed > targetsProcessed) {
+            throw new ValidationException("Run checkpoint reports " + targetsFailed + " failed targets within "
+                    + targetsProcessed + " processed");
+        }
+        // Normalised rather than refused: an absent map is a run that has produced nothing, which is a state a
+        // checkpoint legitimately describes.
+        return yieldByResource == null
+                ? new RunHandle(state, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
+                        Map.of())
+                : this;
     }
 
     private String toJson() {

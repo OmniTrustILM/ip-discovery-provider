@@ -56,9 +56,10 @@ public class RunRegistry {
         private final AtomicReference<Future<?>> scan = new AtomicReference<>();
         /**
          * Set when a run is rebuilt from a replayed checkpoint, and cleared by the first drain that proves Core is
-         * exactly at it. Zero means no verification is owed.
+         * exactly at it. {@link #NOTHING_OWED} means none is owed -- not zero, which is the high water of a run
+         * rebuilt before it produced anything, and precisely the run whose cursor most needs checking.
          */
-        private final AtomicLong drainVerificationOwedAt = new AtomicLong();
+        private final AtomicLong drainVerificationOwedAt = new AtomicLong(NOTHING_OWED);
 
         private Entry(RunHandle handle, long now) {
             this.handle = new AtomicReference<>(handle);
@@ -195,6 +196,9 @@ public class RunRegistry {
      * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by
      * either would otherwise have every later drain served with no cursor check at all.
      */
+    /** Outside the sequence space, which starts at zero and only grows. */
+    private static final long NOTHING_OWED = -1L;
+
     public void oweDrainVerification(UUID runId, long highWater) {
         Entry entry = runs.get(runId);
         if (entry != null) {
@@ -205,16 +209,17 @@ public class RunRegistry {
     /** The high water a drain must match before this run may serve anything, or empty when none is owed. */
     public Optional<Long> drainVerificationOwed(UUID runId) {
         Entry entry = runs.get(runId);
-        if (entry == null || entry.drainVerificationOwedAt.get() <= 0) {
+        if (entry == null) {
             return Optional.empty();
         }
-        return Optional.of(entry.drainVerificationOwedAt.get());
+        long owed = entry.drainVerificationOwedAt.get();
+        return owed == NOTHING_OWED ? Optional.empty() : Optional.of(owed);
     }
 
     public void drainVerified(UUID runId) {
         Entry entry = runs.get(runId);
         if (entry != null) {
-            entry.drainVerificationOwedAt.set(0);
+            entry.drainVerificationOwedAt.set(NOTHING_OWED);
         }
     }
 
@@ -292,10 +297,23 @@ public class RunRegistry {
             if (run.getValue().lastDriven.get() > cutoff) {
                 continue;
             }
-            // Remove first: a lifecycle call arriving now finds nothing and is answered as a forgotten run, which is
-            // the contract's expected answer, rather than reaching a scan that is being torn down underneath it.
-            if (runs.remove(run.getKey(), run.getValue())) {
-                release(run.getValue());
+            // Re-read the timestamp inside the map's own computation rather than trusting the one above. A two-arg
+            // remove would not help: touch() mutates the entry in place, so the value is the same instance either
+            // way, and a lifecycle call landing between the check and the removal would be dropped along with the
+            // run it was driving.
+            Entry[] taken = new Entry[1];
+            runs.computeIfPresent(run.getKey(), (key, entry) -> {
+                if (entry.lastDriven.get() > cutoff) {
+                    return entry;
+                }
+                taken[0] = entry;
+                return null;
+            });
+            // Released outside the computation: it stops a scan and closes a buffer, which is not work to do while
+            // holding a bin of the map. By now the run is gone, so a lifecycle call finds nothing and is answered as
+            // a forgotten run, which is the contract's expected answer.
+            if (taken[0] != null) {
+                release(taken[0]);
                 abandoned.add(run.getKey());
                 logger
                         .warn("Run {} abandoned after {} without a lifecycle call from the platform", run.getKey(),

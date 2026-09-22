@@ -280,7 +280,10 @@ public class ScanRunner {
             // Driven by the run's resource set rather than always on: a key per certificate roughly doubles item
             // count, sequence consumption and buffer occupancy.
             if (resources.contains(Resource.CRYPTOGRAPHIC_KEY)) {
-                buffer.add(keyItem(certificate, url), KEY_ITEM_WEIGHT);
+                DiscoveredItemDto key = keyItem(certificate, url);
+                // From the key's own material rather than a constant: a post-quantum SPKI runs to several kilobytes,
+                // which a fixed figure sized for RSA would charge as though it were a few hundred bytes.
+                buffer.add(key, base64Length(certificate.getPublicKey().getEncoded().length) + ENVELOPE_BYTES);
                 counted(tally, Resource.CRYPTOGRAPHIC_KEY);
             }
         } catch (InterruptedException | BufferBudget.BufferLimitExceededException e) {
@@ -418,16 +421,25 @@ public class ScanRunner {
         return item;
     }
 
-    /** An SPKI, a hex fingerprint and four small fields; the largest realistic SPKI is an RSA-4096 at ~800 bytes. */
-    private static final long KEY_ITEM_WEIGHT = 1_536;
+    /**
+     * Everything an item carries besides its payload: a 64-character reference, an ISO timestamp, the resource
+     * discriminator, the source metadata attribute with its URL, and the JSON quoting around all of it. Measured
+     * against a serialised item rather than guessed, and rounded up -- the buffer's bounds exist to keep a page
+     * within what the transport will carry, so the error has to fall on the safe side.
+     */
+    private static final long ENVELOPE_BYTES = 1_024;
+
+    /** Base64 is four characters per three bytes, rounded up to the next group. */
+    static long base64Length(int rawBytes) {
+        return 4L * ((rawBytes + 2) / 3);
+    }
 
     /**
-     * The buffer takes the weight rather than measuring it, and this is the caller that owes it a truthful number.
-     * The DER dominates a certificate item: base64 inflates it by a third, and the rest is a digest, a timestamp and
-     * an enum.
+     * The buffer takes the weight rather than measuring it, and this is the caller that owes it a truthful number:
+     * it has just built the payload, while the buffer would have to serialise the item again to find out.
      */
-    private static long weightOf(int derLength) {
-        return (derLength * 4L / 3) + 512;
+    static long weightOf(int derLength) {
+        return base64Length(derLength) + ENVELOPE_BYTES;
     }
 
     private static final class ChunkTally {

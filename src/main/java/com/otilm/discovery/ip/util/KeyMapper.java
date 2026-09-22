@@ -14,6 +14,7 @@ import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Locale;
 
 /**
  * The public key a scanned certificate already carries.
@@ -69,18 +70,42 @@ public final class KeyMapper {
         if (jcaName == null) {
             return KeyAlgorithm.UNKNOWN;
         }
-        return switch (jcaName.toUpperCase().replace("-", "").replace("+", "PLUS")) {
+        // Locale.ROOT, not the default: under a Turkish locale "Dilithium" upper-cases to "DILITHIUM" with a dotted
+        // I, which matches nothing and turns a recognised algorithm into UNKNOWN wherever the JVM happens to run.
+        String normalised = jcaName.toUpperCase(Locale.ROOT).replace("-", "").replace("+", "PLUS");
+        return switch (normalised) {
             case "RSA" -> KeyAlgorithm.RSA;
             // JCA says EC for the key; the platform names the signature family it belongs to.
             case "EC", "ECDSA" -> KeyAlgorithm.ECDSA;
-            case "FALCON" -> KeyAlgorithm.FALCON;
-            case "MLDSA" -> KeyAlgorithm.MLDSA;
-            case "MLKEM" -> KeyAlgorithm.MLKEM;
-            case "SLHDSA" -> KeyAlgorithm.SLHDSA;
-            case "DILITHIUM" -> KeyAlgorithm.DILITHIUM;
-            case "SPHINCSPLUS" -> KeyAlgorithm.SPHINCSPLUS;
-            default -> KeyAlgorithm.UNKNOWN;
+            default -> byFamily(normalised);
         };
+    }
+
+    /**
+     * The post-quantum families, matched by prefix. A provider names a parameter set rather than a family --
+     * {@code SLH-DSA-SHA2-128F}, {@code ML-DSA-65} -- and an exact match would report every one of them as UNKNOWN,
+     * which is the same as not mapping them at all.
+     */
+    private static KeyAlgorithm byFamily(String normalised) {
+        if (normalised.startsWith("MLDSA")) {
+            return KeyAlgorithm.MLDSA;
+        }
+        if (normalised.startsWith("MLKEM")) {
+            return KeyAlgorithm.MLKEM;
+        }
+        if (normalised.startsWith("SLHDSA")) {
+            return KeyAlgorithm.SLHDSA;
+        }
+        if (normalised.startsWith("FALCON")) {
+            return KeyAlgorithm.FALCON;
+        }
+        if (normalised.startsWith("DILITHIUM") || normalised.startsWith("CRYSTALSDILITHIUM")) {
+            return KeyAlgorithm.DILITHIUM;
+        }
+        if (normalised.startsWith("SPHINCSPLUS")) {
+            return KeyAlgorithm.SPHINCSPLUS;
+        }
+        return KeyAlgorithm.UNKNOWN;
     }
 
     /**

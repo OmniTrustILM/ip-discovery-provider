@@ -145,4 +145,87 @@ class RunHandleTest {
         Assertions.assertEquals(handle().cursorIndex(), stopped.cursorIndex());
         Assertions.assertEquals(handle().sequenceHighWater(), stopped.sequenceHighWater());
     }
+
+    // --- what identifies the checkpoint, and what it has to mean ---
+
+    /**
+     * The UUID is what identifies an attribute definition. Core carries metadata of its own, and one of it sharing
+     * this name would otherwise be read as the checkpoint and fail a run that was recoverable.
+     */
+    @Test
+    void ignoresAForeignAttributeWearingTheCheckpointsName() {
+        MetadataAttributeV3 impostor = new MetadataAttributeV3();
+        impostor.setUuid("11111111-2222-3333-4444-555555555555");
+        impostor.setName(RunHandle.ATTRIBUTE_NAME);
+        impostor.setType(AttributeType.META);
+        impostor.setContentType(AttributeContentType.STRING);
+        impostor.setContent(List.of(new StringAttributeContentV3("not a checkpoint")));
+
+        Assertions
+                .assertEquals(Optional.empty(), RunHandle.from(List.of(impostor)),
+                        "a name collision must not be read as the checkpoint");
+    }
+
+    @Test
+    void findsTheCheckpointByItsUuidAlongsideOtherMetadata() {
+        MetadataAttributeV3 other = new MetadataAttributeV3();
+        other.setUuid("11111111-2222-3333-4444-555555555555");
+        other.setName("meta_somethingCoreCarries");
+        other.setType(AttributeType.META);
+        other.setContentType(AttributeContentType.STRING);
+        other.setContent(List.of(new StringAttributeContentV3("x")));
+
+        RunHandle handle = new RunHandle(RunHandle.RunState.STOPPED, 4, 40, "digest", 4, 1, Map.of());
+        List<MetadataAttribute> meta = new java.util.ArrayList<>(List.of(other));
+        meta.addAll(handle.encode());
+
+        Assertions.assertEquals(handle, RunHandle.from(meta).orElseThrow());
+    }
+
+    /**
+     * Jackson fills what is absent with null or zero, so a truncated or hostile checkpoint parses cleanly and then
+     * fails somewhere with nothing naming the cause -- a negative cursor indexing the enumeration, a sequence space
+     * that runs backwards, a null map dereferenced. The contract documents a validation failure for a checkpoint it
+     * cannot read, and this is the other half of unreadable.
+     */
+    @Test
+    void refusesACheckpointThatParsesButCannotBeTrue() {
+        Assertions.assertThrows(ValidationException.class, () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":-1,"
+                + "\"sequenceHighWater\":0,\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}"));
+        Assertions.assertThrows(ValidationException.class, () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":0,"
+                + "\"sequenceHighWater\":-5,\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}"));
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"cursorIndex\":0,\"sequenceHighWater\":0,\"targetsDigest\":\"d\"}"),
+                        "a checkpoint with no state cannot say whether it may be rebuilt");
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":0,\"sequenceHighWater\":0}"),
+                        "without a digest there is nothing to check the enumeration against");
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":0,\"sequenceHighWater\":0,"
+                                + "\"targetsDigest\":\"d\",\"targetsProcessed\":2,\"targetsFailed\":5}"),
+                        "more failures than processed targets is not a state a run can reach");
+    }
+
+    /** An absent yield map is a run that produced nothing, which a checkpoint may legitimately describe. */
+    @Test
+    void readsACheckpointThatHasProducedNothingYet() {
+        RunHandle handle = decode("{\"state\":\"STOPPED\",\"cursorIndex\":0,\"sequenceHighWater\":0,"
+                + "\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}");
+
+        Assertions.assertEquals(Map.of(), handle.yieldByResource());
+    }
+
+    private static RunHandle decode(String json) {
+        MetadataAttributeV3 attribute = new MetadataAttributeV3();
+        attribute.setUuid(RunHandle.ATTRIBUTE_UUID);
+        attribute.setName(RunHandle.ATTRIBUTE_NAME);
+        attribute.setType(AttributeType.META);
+        attribute.setContentType(AttributeContentType.STRING);
+        attribute.setContent(List.of(new StringAttributeContentV3(json)));
+        return RunHandle.from(List.of(attribute)).orElseThrow();
+    }
+
 }

@@ -364,4 +364,43 @@ class RunRegistryTest {
         Assertions.assertEquals(0, budget.openRuns());
         Assertions.assertFalse(registry.release(runId), "a run already released is not released again");
     }
+
+    /**
+     * Zero is a real high water: it is what a run rebuilt before its first item reports, and exactly the run whose
+     * cursor most needs checking. Sharing it with "nothing owed" turned the guard off for that case.
+     */
+    @Test
+    void treatsAZeroHighWaterAsAVerificationThatIsOwed() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        registry.oweDrainVerification(runId, 0);
+
+        Assertions
+                .assertEquals(0L, registry.drainVerificationOwed(runId).orElseThrow(),
+                        "a rebuilt run that produced nothing still owes the cursor check");
+
+        registry.drainVerified(runId);
+
+        Assertions.assertEquals(Optional.empty(), registry.drainVerificationOwed(runId));
+    }
+
+    /**
+     * The reaper reads the timestamp, then removes. A lifecycle call landing in between must win: the alternative is
+     * tearing down a run the platform is actively driving, buffer and all.
+     */
+    @Test
+    void keepsARunThatWasDrivenAfterTheIdleCheckBegan() {
+        Ticker ticker = new Ticker();
+        RunRegistry registry = new RunRegistry(ticker);
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        ticker.advance(Duration.ofHours(1));
+        registry.touch(runId);
+
+        Assertions.assertEquals(List.of(), registry.abandonIdle(Duration.ofMinutes(30)));
+        Assertions.assertTrue(registry.find(runId).isPresent(), "a run driven just now is not idle");
+    }
+
 }

@@ -299,4 +299,73 @@ class ResultBufferTest {
         }
         return false;
     }
+
+    // --- only what is published, and only contiguously ---
+
+    /**
+     * The failure this prevents completes successfully. A producer between its {@code incrementAndGet} and its
+     * {@code put} has a sequence nothing can see yet; serving past it hands Core a cursor above an item it never
+     * received, and Core's own filter then drops that item when it lands.
+     */
+    @Test
+    void doesNotServePastASequenceThatIsNumberedButNotYetPublished() throws Exception {
+        UUID runId = UUID.randomUUID();
+        BufferBudget budget = new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000);
+        budget.open(runId);
+        ResultBuffer buffer = new ResultBuffer(runId, budget, 0);
+
+        // Stands in for a producer inside add(): its sequence is taken, its put has not happened.
+        reserveWithoutPublishing(buffer);
+        buffer.add(item("published"), 100);
+
+        ResultBuffer.Page page = buffer.page(0, 100, 1L << 20);
+
+        Assertions.assertTrue(page.items().isEmpty(), "sequence 1 is missing, so nothing above it may be served");
+        Assertions.assertTrue(page.more(), "there is more to come once the gap closes");
+        Assertions
+                .assertEquals(0, page.highestSequence(),
+                        "the page vouches for nothing, so Core's cursor must not move");
+    }
+
+    /** Once the gap closes the whole run is servable, in order. */
+    @Test
+    void servesTheWholeRunOnceTheGapCloses() throws Exception {
+        UUID runId = UUID.randomUUID();
+        BufferBudget budget = new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000);
+        budget.open(runId);
+        ResultBuffer buffer = new ResultBuffer(runId, budget, 0);
+        buffer.add(item("one"), 100);
+        buffer.add(item("two"), 100);
+
+        ResultBuffer.Page page = buffer.page(0, 100, 1L << 20);
+
+        Assertions.assertEquals(2, page.items().size());
+        Assertions.assertEquals(2, page.highestSequence());
+        Assertions.assertFalse(page.more());
+    }
+
+    /**
+     * An item no page can carry would otherwise answer empty with more=true, and Core would retry the same cursor
+     * forever. The run has to end instead of pretending it is making progress.
+     */
+    @Test
+    void failsRatherThanLoopingOnAnItemNoPageCanCarry() throws Exception {
+        UUID runId = UUID.randomUUID();
+        BufferBudget budget = new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000);
+        budget.open(runId);
+        ResultBuffer buffer = new ResultBuffer(runId, budget, 0);
+        buffer.add(item("huge"), 8_000);
+
+        BufferBudget.BufferLimitExceededException thrown = Assertions
+                .assertThrows(BufferBudget.BufferLimitExceededException.class, () -> buffer.page(0, 100, 4_000));
+
+        Assertions.assertTrue(thrown.getMessage().contains("8000"), thrown.getMessage());
+    }
+
+    private static void reserveWithoutPublishing(ResultBuffer buffer) throws Exception {
+        java.lang.reflect.Field sequencer = ResultBuffer.class.getDeclaredField("sequencer");
+        sequencer.setAccessible(true);
+        ((java.util.concurrent.atomic.AtomicLong) sequencer.get(buffer)).incrementAndGet();
+    }
+
 }

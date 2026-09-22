@@ -426,4 +426,19 @@ class ScanRunnerTest {
         Assertions.assertEquals(4, handle.targetsFailed(), "nothing usable came of the target either way");
         Assertions.assertEquals(0, buffer.held());
     }
+
+    /**
+     * The buffer trusts this number to keep a page inside what the transport carries, so it has to cover the whole
+     * serialised item rather than most of it. A 1000-byte certificate serialises to about 1981 bytes once its base64,
+     * its reference, its timestamp and its source metadata are counted; the previous estimate charged 1845.
+     */
+    @Test
+    void chargesAtLeastWhatACertificateItemSerialisesTo() {
+        Assertions.assertTrue(ScanRunner.weightOf(1000) > 1981,
+                "a 1000-byte certificate must not be charged less than it serialises to, was "
+                        + ScanRunner.weightOf(1000));
+        Assertions.assertEquals(4, ScanRunner.base64Length(3), "base64 is four characters per three bytes");
+        Assertions.assertEquals(8, ScanRunner.base64Length(4), "a partial group still costs a whole group");
+    }
+
 }

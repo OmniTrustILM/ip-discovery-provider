@@ -79,6 +79,10 @@ public class ResultBuffer {
      * The items strictly above {@code afterSequence}, in sequence order.
      *
      * <p>
+     * Only a contiguous run of published sequences is served, and the page's {@code highestSequence} is the end of
+     * that run rather than the sequencer's value.
+     *
+     * <p>
      * A cursor below the discard watermark is answered empty rather than refused. Core never sends a regressed
      * cursor, but arrival order is not send order: a redelivered drain or one stuck past Core's budget arrives late,
      * which is transport, not a defect. What must never happen is serving items as though they followed the stale
@@ -96,15 +100,35 @@ public class ResultBuffer {
         List<DiscoveredItemDto> page = new ArrayList<>();
         long bytes = 0;
         boolean more = false;
+        long next = afterSequence + 1;
         for (Map.Entry<Long, Held> entry : items.tailMap(afterSequence, false).entrySet()) {
+            if (entry.getKey() != next) {
+                // A sequence below this one is numbered and not yet in the map: a producer is between its
+                // incrementAndGet and its put. Serving past it would hand Core a cursor above an item it has never
+                // seen, and Core's filter drops anything at or below its cursor -- so that item would be lost on a
+                // run that then completes successfully. The gap closes on its own: an add that has taken a sequence
+                // always reaches the put.
+                more = true;
+                break;
+            }
+            if (page.isEmpty() && entry.getValue().bytes() > maxBytes) {
+                // Nothing can carry this item, and answering an empty page with more=true would have Core retry the
+                // same cursor forever. The run has to say so instead.
+                throw new BufferBudget.BufferLimitExceededException("Run " + runId + " holds an item of "
+                        + entry.getValue().bytes() + " bytes at sequence " + entry.getKey()
+                        + ", which exceeds the " + maxBytes + " bytes a page can carry");
+            }
             if (page.size() >= maxItems || bytes + entry.getValue().bytes() > maxBytes) {
                 more = true;
                 break;
             }
             page.add(entry.getValue().item());
             bytes += entry.getValue().bytes();
+            next++;
         }
-        return new Page(page, highestSequence(), more);
+        // The last sequence this page can vouch for, which is where Core's cursor may safely land. Not the
+        // sequencer's value: that counts numbers already taken by producers who have not published yet.
+        return new Page(page, next - 1, more);
     }
 
     /**
