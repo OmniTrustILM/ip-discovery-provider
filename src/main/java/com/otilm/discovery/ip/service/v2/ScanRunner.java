@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.HexFormat;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +38,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * One run's scan: targets in chunks, results into the buffer, position into the handle.
@@ -80,6 +82,9 @@ public class ScanRunner {
      * done, and moves on every poll instead of once per 256 targets.
      */
     private final AtomicReference<ChunkTally> inFlightChunk = new AtomicReference<>();
+
+    /** Run-level failure reasons, accumulated across chunks so the summary describes the whole sweep. */
+    private final Map<String, AtomicLong> failureReasons = new java.util.concurrent.ConcurrentHashMap<>();
     private final List<Future<?>> inFlight = new ArrayList<>();
 
     public ScanRunner(UUID runId, TargetEnumeration targets, ResultBuffer buffer, RunRegistry registry,
@@ -228,17 +233,7 @@ public class ScanRunner {
         try {
             ConnectionResponse response = connectionService.getCertificates(url);
             for (X509Certificate certificate : response.getCertificates()) {
-                byte[] der = certificate.getEncoded();
-                if (resources.contains(Resource.CERTIFICATE)) {
-                    buffer.add(certificateItem(der, url), weightOf(der.length));
-                    counted(tally, Resource.CERTIFICATE);
-                }
-                // Driven by the run's resource set rather than always on: a key per certificate roughly doubles item
-                // count, sequence consumption and buffer occupancy.
-                if (resources.contains(Resource.CRYPTOGRAPHIC_KEY)) {
-                    buffer.add(keyItem(certificate, url), KEY_ITEM_WEIGHT);
-                    counted(tally, Resource.CRYPTOGRAPHIC_KEY);
-                }
+                emit(certificate, url, tally);
             }
             tally.processed.incrementAndGet();
         } catch (InterruptedException e) {
@@ -252,8 +247,14 @@ public class ScanRunner {
                 logger.error("Run {} cannot continue: {}", runId, e.getMessage());
             }
             stop();
+        } catch (ItemNotMappedException e) {
+            // The reason is already recorded, against the mapping rather than the probe. Counted the same way a
+            // target that never answered is, since nothing usable came of it either way.
+            tally.processed.incrementAndGet();
+            tally.failed.incrementAndGet();
         } catch (Exception e) {
             logger.debug("Probe of {} in run {} failed: {}", url, runId, e.getMessage());
+            recordFailure(tally, e.getClass().getSimpleName());
             tally.processed.incrementAndGet();
             tally.failed.incrementAndGet();
         } finally {
@@ -262,10 +263,78 @@ public class ScanRunner {
     }
 
     /**
+     * Turns one scanned certificate into the items the run asked for.
+     *
+     * <p>
+     * Its own failure is kept apart from the probe's. A target that did not answer and a certificate this connector
+     * could not map both end as a failed target, but only one of them is our defect, and reporting them the same way
+     * hides it: a mapping that threw for every certificate looks exactly like a range where nothing was listening.
+     */
+    private void emit(X509Certificate certificate, String url, ChunkTally tally) throws InterruptedException {
+        try {
+            byte[] der = certificate.getEncoded();
+            if (resources.contains(Resource.CERTIFICATE)) {
+                buffer.add(certificateItem(der, url), weightOf(der.length));
+                counted(tally, Resource.CERTIFICATE);
+            }
+            // Driven by the run's resource set rather than always on: a key per certificate roughly doubles item
+            // count, sequence consumption and buffer occupancy.
+            if (resources.contains(Resource.CRYPTOGRAPHIC_KEY)) {
+                buffer.add(keyItem(certificate, url), KEY_ITEM_WEIGHT);
+                counted(tally, Resource.CRYPTOGRAPHIC_KEY);
+            }
+        } catch (InterruptedException | BufferBudget.BufferLimitExceededException e) {
+            // Both mean the run itself is ending. Neither is a mapping fault, so they travel to the probe's handling.
+            throw e;
+        } catch (Exception e) {
+            // Warned rather than debugged: the target answered, so this is the connector failing to use what it got.
+            logger.warn("Run {} could not map a certificate from {}: {}", runId, url, e.toString());
+            recordFailure(tally, ITEM_FAILURE_PREFIX + e.getClass().getSimpleName());
+            throw new ItemNotMappedException(e);
+        }
+    }
+
+    /** Carries a mapping fault out to the probe, which counts the target the same way it counts an unreachable one. */
+    private static final class ItemNotMappedException extends RuntimeException {
+        private ItemNotMappedException(Throwable cause) {
+            super(cause);
+        }
+    }
+
+    private static void recordFailure(ChunkTally tally, String reason) {
+        tally.failures.computeIfAbsent(reason, key -> new AtomicLong()).incrementAndGet();
+    }
+
+    /**
+     * The reasons this run's targets failed, commonest first, as "{@code 4094 x SSLHandshakeException}".
+     *
+     * <p>
+     * Without it a wide sweep reports only a count, and every cause reads alike -- a range that is not listening, a
+     * TLS stack that refuses a bare IP, and a bug in this connector all print the same number.
+     */
+    String failureSummary() {
+        if (failureReasons.isEmpty()) {
+            return "";
+        }
+        return ": " + failureReasons
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.<String, AtomicLong>comparingByValue(Comparator.comparingLong(AtomicLong::get))
+                        .reversed())
+                .limit(TOP_FAILURE_REASONS)
+                .map(reason -> reason.getValue().get() + " x " + reason.getKey())
+                .collect(Collectors.joining(", "));
+    }
+
+    /**
      * Writes the chunk's work into the handle in one step, at the boundary. Counting per target instead would
      * double-count the interrupted chunk when a resumed run scans it again.
      */
     private void commit(long cursor, ChunkTally tally) {
+        tally.failures
+                .forEach((reason, count) -> failureReasons
+                        .computeIfAbsent(reason, key -> new AtomicLong())
+                        .addAndGet(count.get()));
         registry
                 .update(runId, handle -> {
                     // A chunk finishing after a stop was recorded must not move the checkpoint: the stop has already
@@ -282,13 +351,19 @@ public class ScanRunner {
                 })
                 .ifPresent(committed -> logger
                         // Per chunk rather than per target: a wide sweep is otherwise silent for its whole duration.
-                        .info("Run {} at {}/{} targets ({} failed), {} items held", runId, committed.cursorIndex(),
-                                targets.size(), committed.targetsFailed(), buffer.held()));
+                        .info("Run {} at {}/{} targets ({} failed{}), {} items held", runId, committed.cursorIndex(),
+                                targets.size(), committed.targetsFailed(), failureSummary(), buffer.held()));
     }
 
     private static void counted(ChunkTally tally, Resource resource) {
         tally.yield.computeIfAbsent(resource.getCode(), key -> new AtomicLong()).incrementAndGet();
     }
+
+    /** Enough to name what is happening without turning one log line into a report. */
+    private static final int TOP_FAILURE_REASONS = 3;
+
+    /** Marks a reason as this connector failing to use a certificate, not a target failing to answer. */
+    private static final String ITEM_FAILURE_PREFIX = "item:";
 
     private static final String SOURCE_ATTRIBUTE_UUID = "c1f0e6a2-3d5b-4a17-9f8c-6b2e0d4a7e31";
 
@@ -359,5 +434,7 @@ public class ScanRunner {
         private final AtomicLong processed = new AtomicLong();
         private final AtomicLong failed = new AtomicLong();
         private final Map<String, AtomicLong> yield = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Why targets failed in this chunk, keyed by exception name; merged into the run's totals at the boundary. */
+        private final Map<String, AtomicLong> failures = new java.util.concurrent.ConcurrentHashMap<>();
     }
 }

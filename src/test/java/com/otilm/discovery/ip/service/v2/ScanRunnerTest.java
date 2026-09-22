@@ -12,6 +12,7 @@ import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import javax.security.auth.x500.X500Principal;
 import java.io.IOException;
@@ -19,6 +20,7 @@ import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.cert.X509Certificate;
+import java.security.cert.CertificateEncodingException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
@@ -357,5 +359,71 @@ class ScanRunnerTest {
         Assertions
                 .assertTrue(registry.find(runId).orElseThrow().targetsFailed() < 8,
                         "the run must end on the limit, not grind through every target reporting failures");
+    }
+
+    // --- why a sweep failed, not just how much of it ---
+
+    /**
+     * A wide sweep that finds nothing reports only a count, and every cause reads alike: a range with nothing
+     * listening, a TLS stack that will not answer a bare IP, and a defect in this connector all print the same
+     * number. Naming the commonest reasons is what turns that into something an operator can act on.
+     */
+    /** A healthy sweep says nothing extra: the summary exists to explain failures, not to pad every line. */
+    @Test
+    void saysNothingWhenEveryTargetAnswered() throws Exception {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+        ScanRunner runner = runner(runId, targets, buffer, new AlwaysAnswers(), 4);
+
+        runner.scan();
+
+        Assertions.assertEquals(4, registry.find(runId).orElseThrow().targetsProcessed());
+        Assertions.assertEquals(0, registry.find(runId).orElseThrow().targetsFailed());
+        Assertions.assertEquals("", runner.failureSummary());
+    }
+
+    @Test
+    void summarisesTheDominantFailureReason() throws Exception {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+        ScanRunner runner = runner(runId, targets, buffer, new AlwaysFails(), 4);
+
+        runner.scan();
+
+        Assertions
+                .assertEquals(": 4 x IOException", runner.failureSummary(),
+                        "the count and the reason belong together, or the log says nothing new");
+    }
+
+    /**
+     * A certificate this connector cannot map is its own defect, and it must not read as a target that did not
+     * answer. Both end the target as failed -- nothing usable came of it either way -- but the reason distinguishes
+     * them, so a mapping that throws for every certificate cannot hide inside an unreachable-looking sweep.
+     */
+    @Test
+    void tellsACertificateItCannotMapFromATargetThatNeverAnswered() throws Exception {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+
+        X509Certificate unmappable = Mockito.mock(X509Certificate.class);
+        Mockito.when(unmappable.getEncoded()).thenThrow(new CertificateEncodingException("no encoding"));
+        ScanRunner runner = runner(runId, targets, buffer,
+                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {unmappable}), 4);
+
+        runner.scan();
+
+        Assertions
+                .assertEquals(": 4 x item:CertificateEncodingException", runner.failureSummary(),
+                        "an item this connector could not build is marked as ours");
+        RunHandle handle = registry.find(runId).orElseThrow();
+        Assertions.assertEquals(4, handle.targetsProcessed());
+        Assertions.assertEquals(4, handle.targetsFailed(), "nothing usable came of the target either way");
+        Assertions.assertEquals(0, buffer.held());
     }
 }
