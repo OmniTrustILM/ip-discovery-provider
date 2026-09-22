@@ -253,7 +253,7 @@ class ScanRunnerTest {
      * run's resource set because a key per certificate roughly doubles item count and buffer occupancy.
      */
     @Test
-    void emitsAKeyBesideEachCertificateWhenTheRunAsksForBoth() throws Exception {
+    void emitsAKeyBesideEachCertificateWhenTheRunAsksForBoth() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
         registry.register(runId, RunHandle.initial(targets.digest()));
@@ -271,7 +271,7 @@ class ScanRunnerTest {
 
     /** A run that did not ask for keys must not be charged for them, in items, sequences or buffer. */
     @Test
-    void emitsNoKeyItemsForACertificatesOnlyRun() throws Exception {
+    void emitsNoKeyItemsForACertificatesOnlyRun() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
         registry.register(runId, RunHandle.initial(targets.digest()));
@@ -311,7 +311,7 @@ class ScanRunnerTest {
      * inventory of certificates and no way to tell which host and port produced any of them.
      */
     @Test
-    void recordsWhereEachItemWasFound() throws Exception {
+    void recordsWhereEachItemWasFound() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1", "443,8443", false);
         registry.register(runId, RunHandle.initial(targets.digest()));
@@ -365,7 +365,7 @@ class ScanRunnerTest {
 
     /** A healthy sweep says nothing extra: the summary exists to explain failures, not to pad every line. */
     @Test
-    void saysNothingWhenEveryTargetAnswered() throws Exception {
+    void saysNothingWhenEveryTargetAnswered() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
         registry.register(runId, RunHandle.initial(targets.digest()));
@@ -380,7 +380,7 @@ class ScanRunnerTest {
     }
 
     @Test
-    void summarisesTheDominantFailureReason() throws Exception {
+    void summarisesTheDominantFailureReason() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
         registry.register(runId, RunHandle.initial(targets.digest()));

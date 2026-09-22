@@ -123,9 +123,9 @@ class RunHandleTest {
         attribute.setType(AttributeType.META);
         attribute.setContentType(AttributeContentType.STRING);
         attribute.setContent(List.of(new StringAttributeContentV3("{ this is not json")));
+        List<MetadataAttribute> meta = List.of(attribute);
 
-        Assertions
-                .assertThrows(ValidationException.class, () -> RunHandle.from(List.<MetadataAttribute>of(attribute)));
+        Assertions.assertThrows(ValidationException.class, () -> RunHandle.from(meta));
     }
 
     @Test

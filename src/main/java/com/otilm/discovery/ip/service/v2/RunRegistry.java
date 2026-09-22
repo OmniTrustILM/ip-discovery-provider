@@ -95,11 +95,11 @@ public class RunRegistry {
      * Records that the platform is still driving this run. Every lifecycle call does this, which is what makes the
      * deadline measure neglect rather than duration — a wall-clock limit would kill a legitimate long scan, and a
      * limit on scan time alone would misfire during a Core outage in the opposite direction.
-     */
-    /**
-     * Records that the platform drove this run. Through {@code computeIfPresent} so it is serialised against the
-     * reaper, which decides and removes inside its own computation on this key; a bare update can land after the
-     * reaper has read the timestamp and before it returns, and the run is then torn down while it is being driven.
+     *
+     * <p>
+     * Through {@code computeIfPresent} so it is serialised against the reaper, which decides and removes inside its
+     * own computation on this key; a bare update can land after the reaper has read the timestamp and before it
+     * returns, and the run is then torn down while it is being driven.
      */
     public void touch(UUID runId) {
         runs.computeIfPresent(runId, (key, entry) -> {
