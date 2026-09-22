@@ -288,15 +288,19 @@ public class DiscoveryRunService {
         // -- and it may only answer status and drains until a resume starts production, which is where the budget is
         // taken instead. A node at its run cap must still answer the ticks that keep a stopped run alive: Core
         // reads enough refusals as the run being unrecoverable.
-        if (!registry.register(runId, handle)) {
+        // Everything the entry needs is built before it is published. Registering it empty and filling it afterwards
+        // leaves a window where it reads as a running run owing no cursor check, and a concurrent drain served in
+        // that window is exactly what the check exists to prevent.
+        //
+        // The buffer exists so a resume numbers from where the checkpoint left off rather than from one. The
+        // enumeration is rebuilt from the same replayed request, so a rebuilt run reports a total like any other.
+        ResultBuffer rebuilt = new ResultBuffer(runId, budget, handle.sequenceHighWater());
+        long targetsTotal = enumerate(request).size();
+        if (!registry
+                .registerRebuilt(runId, handle, DiscoveryRunState.STOPPED, rebuilt, handle.sequenceHighWater(),
+                        targetsTotal)) {
             return registry.find(runId).orElseThrow(() -> new UnknownRunException(runId));
         }
-        registry.setState(runId, DiscoveryRunState.STOPPED);
-        // The buffer exists so a resume numbers from where the checkpoint left off rather than from one.
-        registry.attach(runId, null, new ResultBuffer(runId, budget, handle.sequenceHighWater()));
-        registry.oweDrainVerification(runId, handle.sequenceHighWater());
-        // The enumeration is rebuilt from the same replayed request, so a rebuilt run reports a total like any other.
-        registry.setTargetsTotal(runId, enumerate(request).size());
         logger.info("Rebuilt stopped run {} from its replayed checkpoint at cursor {}", runId, handle.cursorIndex());
         return handle;
     }

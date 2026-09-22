@@ -82,6 +82,27 @@ public class RunRegistry {
     }
 
     /**
+     * Publishes a rebuilt run complete, in one step.
+     *
+     * <p>
+     * A rebuilt entry is only safe to observe once its state, its buffer and the drain verification it owes are all
+     * set. Registered empty and filled afterwards, it is briefly visible as a running run that owes no cursor check
+     * — and that check is the only thing stopping a rebuilt run from serving across a hole. A concurrent resume can
+     * also create a buffer in the gap, which the filling call would then overwrite.
+     *
+     * @return false if the run is already registered, which the caller answers from the entry that is already there
+     */
+    public boolean registerRebuilt(UUID runId, RunHandle handle, DiscoveryRunState state, ResultBuffer buffer,
+            long drainVerificationOwedAt, long targetsTotal) {
+        Entry entry = new Entry(handle, ticker.getAsLong());
+        entry.state.set(state);
+        entry.buffer.set(buffer);
+        entry.drainVerificationOwedAt.set(drainVerificationOwedAt);
+        entry.targetsTotal.set(targetsTotal);
+        return runs.putIfAbsent(runId, entry) == null;
+    }
+
+    /**
      * Gives the registry the means to release a run it later has to abandon: the scan to stop, and the buffer whose
      * budget has to go back. Without the buffer the run's slot and bytes stay charged after it is gone, and the node
      * refuses new runs long after it has any.
