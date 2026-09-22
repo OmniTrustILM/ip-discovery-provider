@@ -58,9 +58,18 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     }
 
     /**
-     * A body that will not parse at all. The base class answers this one with a plain {@link ProblemDetail}, which
-     * carries no {@code errorCode} — the field Core acts on — so a malformed callback would get a different envelope
-     * from every other rejected request on this surface.
+     * A body that will not parse at all.
+     *
+     * <p>
+     * <b>Error shape:</b> the base class answers with a plain {@link ProblemDetail}, which carries no
+     * {@code errorCode} — the field Core acts on — so without this a malformed callback would get a different
+     * envelope from every other rejected request on the surface.
+     *
+     * <p>
+     * <b>Code:</b> {@code BAD_REQUEST}, not {@code VALIDATION_FAILED}. {@link ErrorCode} draws that line itself, on
+     * {@code CONTEXT_MISMATCH}: validation failing means "the body is well formed, so no field rule is what
+     * failed". Nothing was parsed here, so there was no field to apply a rule to. The 400 comes from the code
+     * rather than a literal, so the two cannot drift apart.
      */
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
@@ -68,10 +77,8 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
         // The exception's own text quotes the offending JSON and names the target class, so it stays in the log.
         LOG.error("Unreadable request body: {}", ex.getMessage(), ex);
         return new ResponseEntity<>(
-                ProblemDetailExtended
-                        .fromErrorCode(ErrorCode.VALIDATION_FAILED, "The request body could not be read.", null,
-                                null),
-                headers, HttpStatus.UNPROCESSABLE_ENTITY);
+                ProblemDetailExtended.fromErrorCode(ErrorCode.BAD_REQUEST, "Malformed request body.", null, null),
+                headers, ErrorCode.BAD_REQUEST.getStatus());
     }
 
     @ExceptionHandler(ValidationException.class)

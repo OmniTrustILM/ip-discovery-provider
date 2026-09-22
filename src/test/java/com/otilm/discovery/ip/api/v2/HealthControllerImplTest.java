@@ -9,11 +9,7 @@ class HealthControllerImplTest {
 
     private final HealthControllerImpl controller = new HealthControllerImpl();
 
-    /**
-     * All three probes answer UP unconditionally today. Asserted rather than assumed, because the contract allows
-     * 503 and deriving these from the application's own health is a known follow-up — this is what has to change
-     * when it lands.
-     */
+    /** The contract permits 503, so the current unconditional UP is asserted rather than assumed. */
     @Test
     void reportsEveryProbeAsUp() {
         Assertions.assertEquals(HealthStatus.UP, controller.checkHealth().getStatus());
