@@ -363,11 +363,6 @@ class ScanRunnerTest {
 
     // --- why a sweep failed, not just how much of it ---
 
-    /**
-     * A wide sweep that finds nothing reports only a count, and every cause reads alike: a range with nothing
-     * listening, a TLS stack that will not answer a bare IP, and a defect in this connector all print the same
-     * number. Naming the commonest reasons is what turns that into something an operator can act on.
-     */
     /** A healthy sweep says nothing extra: the summary exists to explain failures, not to pad every line. */
     @Test
     void saysNothingWhenEveryTargetAnswered() throws Exception {
@@ -439,6 +434,32 @@ class ScanRunnerTest {
                         + ScanRunner.weightOf(1000));
         Assertions.assertEquals(4, ScanRunner.base64Length(3), "base64 is four characters per three bytes");
         Assertions.assertEquals(8, ScanRunner.base64Length(4), "a partial group still costs a whole group");
+    }
+
+
+    /**
+     * A keys-only run needs the public key, not the DER. Reading the encoding before the resource set is consulted
+     * failed such a run over something it never asked for.
+     */
+    @Test
+    void producesKeysFromACertificateWhoseEncodingCannotBeRead() throws Exception {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.2", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+
+        X509Certificate unencodable = Mockito.mock(X509Certificate.class);
+        Mockito.when(unencodable.getEncoded()).thenThrow(new CertificateEncodingException("no encoding"));
+        Mockito.when(unencodable.getPublicKey()).thenReturn(certificate.getPublicKey());
+        ScanRunner runner = runner(runId, targets, buffer,
+                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {unencodable}), 4,
+                Set.of(Resource.CRYPTOGRAPHIC_KEY));
+
+        runner.scan();
+
+        Assertions.assertEquals(2, buffer.held(), "both targets should have yielded their key");
+        Assertions.assertEquals(0, registry.find(runId).orElseThrow().targetsFailed());
+        Assertions.assertEquals("", runner.failureSummary());
     }
 
 }

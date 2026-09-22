@@ -22,7 +22,8 @@ class RunHandleTest {
     private static final int MAX_META_BYTES = 64 * 1024;
 
     private static RunHandle handle() {
-        return new RunHandle(RunHandle.RunState.RUNNING, 1_234_567_890L, 987_654_321L,
+        // Cursor and processed count match, as every committed chunk leaves them, and both run past an int.
+        return new RunHandle(RunHandle.RunState.RUNNING, 4_000_000_000L, 987_654_321L,
                 "b1946ac92492d2347c6235b4d2611184", 4_000_000_000L, 12L, Map.of("certificates", 42L, "keys", 7L));
     }
 
@@ -53,7 +54,7 @@ class RunHandleTest {
     void carriesPositionsBeyondTheRangeOfAnInt() {
         RunHandle read = RunHandle.from(handle().encode()).orElseThrow();
 
-        Assertions.assertEquals(1_234_567_890L, read.cursorIndex());
+        Assertions.assertEquals(4_000_000_000L, read.cursorIndex());
         Assertions.assertEquals(4_000_000_000L, read.targetsProcessed());
         Assertions.assertTrue(read.targetsProcessed() > Integer.MAX_VALUE);
     }
@@ -207,6 +208,11 @@ class RunHandleTest {
                         () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":0,\"sequenceHighWater\":0,"
                                 + "\"targetsDigest\":\"d\",\"targetsProcessed\":2,\"targetsFailed\":5}"),
                         "more failures than processed targets is not a state a run can reach");
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":100,\"sequenceHighWater\":0,"
+                                + "\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}"),
+                        "a cursor ahead of the count would resume past targets nothing scanned");
     }
 
     /** An absent yield map is a run that produced nothing, which a checkpoint may legitimately describe. */
@@ -218,14 +224,19 @@ class RunHandleTest {
         Assertions.assertEquals(Map.of(), handle.yieldByResource());
     }
 
-    private static RunHandle decode(String json) {
+    /** Built outside the assertion lambda so only the call under test can throw from inside it. */
+    private static MetadataAttribute checkpointOf(String json) {
         MetadataAttributeV3 attribute = new MetadataAttributeV3();
         attribute.setUuid(RunHandle.ATTRIBUTE_UUID);
         attribute.setName(RunHandle.ATTRIBUTE_NAME);
         attribute.setType(AttributeType.META);
         attribute.setContentType(AttributeContentType.STRING);
         attribute.setContent(List.of(new StringAttributeContentV3(json)));
-        return RunHandle.from(List.of(attribute)).orElseThrow();
+        return attribute;
+    }
+
+    private static RunHandle decode(String json) {
+        return RunHandle.from(List.of(checkpointOf(json))).orElseThrow();
     }
 
 }

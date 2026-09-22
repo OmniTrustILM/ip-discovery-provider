@@ -151,6 +151,13 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
             throw new ValidationException("Run checkpoint counts backwards: cursor " + cursorIndex + ", sequence "
                     + sequenceHighWater + ", processed " + targetsProcessed + ", failed " + targetsFailed);
         }
+        if (cursorIndex != targetsProcessed) {
+            // Every committed chunk advances both by the same count, including the short final one, so these are
+            // equal on any checkpoint this connector wrote. A cursor ahead of the count would resume mid-enumeration
+            // and skip everything in between, on a run that still reports success.
+            throw new ValidationException("Run checkpoint resumes at target " + cursorIndex + " having processed "
+                    + targetsProcessed);
+        }
         if (targetsFailed > targetsProcessed) {
             throw new ValidationException("Run checkpoint reports " + targetsFailed + " failed targets within "
                     + targetsProcessed + " processed");

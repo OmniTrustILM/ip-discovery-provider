@@ -123,15 +123,15 @@ class RunRegistryTest {
     @Test
     void abandonsARunThePlatformHasStoppedDriving() {
         Ticker ticker = new Ticker();
-        RunRegistry registry = new RunRegistry(ticker);
+        RunRegistry tickedRegistry = new RunRegistry(ticker);
         UUID runId = UUID.randomUUID();
-        registry.register(runId, handle(0));
+        tickedRegistry.register(runId, handle(0));
 
         ticker.advance(Duration.ofMinutes(31));
-        List<UUID> abandoned = registry.abandonIdle(Duration.ofMinutes(30));
+        List<UUID> abandoned = tickedRegistry.abandonIdle(Duration.ofMinutes(30));
 
         Assertions.assertEquals(List.of(runId), abandoned);
-        Assertions.assertEquals(0, registry.size());
+        Assertions.assertEquals(0, tickedRegistry.size());
     }
 
     /**
@@ -141,33 +141,33 @@ class RunRegistryTest {
     @Test
     void keepsALongRunningScanThePlatformIsStillDriving() {
         Ticker ticker = new Ticker();
-        RunRegistry registry = new RunRegistry(ticker);
+        RunRegistry tickedRegistry = new RunRegistry(ticker);
         UUID runId = UUID.randomUUID();
-        registry.register(runId, handle(0));
+        tickedRegistry.register(runId, handle(0));
 
         for (int hour = 0; hour < 6; hour++) {
             ticker.advance(Duration.ofMinutes(20));
-            registry.touch(runId);
-            Assertions.assertEquals(List.of(), registry.abandonIdle(Duration.ofMinutes(30)));
+            tickedRegistry.touch(runId);
+            Assertions.assertEquals(List.of(), tickedRegistry.abandonIdle(Duration.ofMinutes(30)));
         }
 
-        Assertions.assertEquals(1, registry.size(), "a run being driven must survive however long it takes");
+        Assertions.assertEquals(1, tickedRegistry.size(), "a run being driven must survive however long it takes");
     }
 
     /** Abandoning has to release the scan, or the threads outlive the run that owned them. */
     @Test
     void stopsTheScanOfAnAbandonedRun() {
         Ticker ticker = new Ticker();
-        RunRegistry registry = new RunRegistry(ticker);
+        RunRegistry tickedRegistry = new RunRegistry(ticker);
         UUID runId = UUID.randomUUID();
-        registry.register(runId, handle(0));
+        tickedRegistry.register(runId, handle(0));
         ScanRunner runner = new ScanRunner(runId, com.otilm.discovery.ip.util.TargetEnumeration
-                .of("10.0.0.1", "443", false), null, registry, null, 1,
+                .of("10.0.0.1", "443", false), null, tickedRegistry, null, 1,
                 java.util.Set.of(com.otilm.api.model.core.auth.Resource.CERTIFICATE));
-        registry.attach(runId, runner, null);
+        tickedRegistry.attach(runId, runner, null);
 
         ticker.advance(Duration.ofHours(1));
-        registry.abandonIdle(Duration.ofMinutes(30));
+        tickedRegistry.abandonIdle(Duration.ofMinutes(30));
 
         Assertions.assertTrue(runner.isStopping(), "the abandoned run's scan should have been told to stop");
     }
@@ -175,12 +175,12 @@ class RunRegistryTest {
     @Test
     void abandonsNothingBeforeTheDeadline() {
         Ticker ticker = new Ticker();
-        RunRegistry registry = new RunRegistry(ticker);
-        registry.register(UUID.randomUUID(), handle(0));
+        RunRegistry tickedRegistry = new RunRegistry(ticker);
+        tickedRegistry.register(UUID.randomUUID(), handle(0));
 
         ticker.advance(Duration.ofMinutes(29));
 
-        Assertions.assertEquals(List.of(), registry.abandonIdle(Duration.ofMinutes(30)));
+        Assertions.assertEquals(List.of(), tickedRegistry.abandonIdle(Duration.ofMinutes(30)));
     }
 
     /**
@@ -190,15 +190,15 @@ class RunRegistryTest {
     @Test
     void handsBackTheBudgetOfAnAbandonedRun() {
         Ticker ticker = new Ticker();
-        RunRegistry registry = new RunRegistry(ticker);
+        RunRegistry tickedRegistry = new RunRegistry(ticker);
         BufferBudget budget = new BufferBudget(1, 100, 1L << 30, 1L << 31, 30_000);
         UUID runId = UUID.randomUUID();
-        registry.register(runId, handle(0));
+        tickedRegistry.register(runId, handle(0));
         Assertions.assertTrue(budget.open(runId));
-        registry.attach(runId, null, new ResultBuffer(runId, budget, 0));
+        tickedRegistry.attach(runId, null, new ResultBuffer(runId, budget, 0));
 
         ticker.advance(Duration.ofHours(1));
-        registry.abandonIdle(Duration.ofMinutes(30));
+        tickedRegistry.abandonIdle(Duration.ofMinutes(30));
 
         Assertions.assertEquals(0, budget.openRuns());
         Assertions.assertTrue(budget.open(UUID.randomUUID()), "the slot must be free for the next run");
@@ -392,15 +392,15 @@ class RunRegistryTest {
     @Test
     void keepsARunThatWasDrivenAfterTheIdleCheckBegan() {
         Ticker ticker = new Ticker();
-        RunRegistry registry = new RunRegistry(ticker);
+        RunRegistry tickedRegistry = new RunRegistry(ticker);
         UUID runId = UUID.randomUUID();
-        registry.register(runId, handle(0));
+        tickedRegistry.register(runId, handle(0));
 
         ticker.advance(Duration.ofHours(1));
-        registry.touch(runId);
+        tickedRegistry.touch(runId);
 
-        Assertions.assertEquals(List.of(), registry.abandonIdle(Duration.ofMinutes(30)));
-        Assertions.assertTrue(registry.find(runId).isPresent(), "a run driven just now is not idle");
+        Assertions.assertEquals(List.of(), tickedRegistry.abandonIdle(Duration.ofMinutes(30)));
+        Assertions.assertTrue(tickedRegistry.find(runId).isPresent(), "a run driven just now is not idle");
     }
 
 }

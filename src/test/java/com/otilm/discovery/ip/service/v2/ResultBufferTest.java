@@ -150,7 +150,10 @@ class ResultBufferTest {
         ResultBuffer.Page late = buffer.page(1, 10, 1L << 20);
 
         Assertions.assertTrue(late.items().isEmpty(), "a late drain must not be served across the discarded range");
-        Assertions.assertEquals(6, late.highestSequence());
+        Assertions
+                .assertEquals(4, late.highestSequence(),
+                        "an empty page may only vouch for what was acknowledged; the sequencer covers items still held");
+        Assertions.assertTrue(late.more(), "sequences 5 and 6 are still here, so the next tick has to come back");
     }
 
     @Test
@@ -290,14 +293,13 @@ class ResultBufferTest {
         Assertions.assertThrows(IllegalArgumentException.class, () -> budget(1, 1, 1, 1, 0));
     }
 
-    private static boolean waitFor(java.util.function.BooleanSupplier condition) throws InterruptedException {
-        for (int i = 0; i < 100; i++) {
-            if (condition.getAsBoolean()) {
-                return true;
-            }
-            Thread.sleep(20);
+    private static boolean waitFor(java.util.function.BooleanSupplier condition) {
+        try {
+            org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(2)).until(condition::getAsBoolean);
+            return true;
+        } catch (org.awaitility.core.ConditionTimeoutException e) {
+            return false;
         }
-        return false;
     }
 
     // --- only what is published, and only contiguously ---
@@ -366,6 +368,27 @@ class ResultBufferTest {
         java.lang.reflect.Field sequencer = ResultBuffer.class.getDeclaredField("sequencer");
         sequencer.setAccessible(true);
         ((java.util.concurrent.atomic.AtomicLong) sequencer.get(buffer)).incrementAndGet();
+    }
+
+
+    /**
+     * A probe already past its budget reservation when the run ends would otherwise publish into a map that has just
+     * been cleared, leaving an item nothing will ever read. Reaching that interleaving through the public API is not
+     * possible -- a later add fails at the budget instead -- so the flag is set directly, which is the state a close
+     * landing mid-add leaves behind.
+     */
+    @Test
+    void refusesToPublishOnceTheRunHasClosedUnderneathIt() throws Exception {
+        UUID runId = UUID.randomUUID();
+        ResultBuffer buffer = buffer(roomyBudget(), runId, 0);
+        buffer.add(item("before"), ITEM_BYTES);
+
+        java.lang.reflect.Field closed = ResultBuffer.class.getDeclaredField("closed");
+        closed.setAccessible(true);
+        ((java.util.concurrent.atomic.AtomicBoolean) closed.get(buffer)).set(true);
+
+        Assertions.assertThrows(InterruptedException.class, () -> buffer.add(item("after"), ITEM_BYTES));
+        Assertions.assertEquals(1, buffer.held(), "the item published before the close is untouched");
     }
 
 }

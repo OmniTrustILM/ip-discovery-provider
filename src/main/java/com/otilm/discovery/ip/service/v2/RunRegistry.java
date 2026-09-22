@@ -37,6 +37,10 @@ public class RunRegistry {
     private final Map<UUID, Entry> runs = new ConcurrentHashMap<>();
     private final LongSupplier ticker;
 
+    /** Outside the sequence space, which starts at zero and only grows, so zero stays a high water like any other. */
+    private static final long NOTHING_OWED = -1L;
+
+    @org.springframework.beans.factory.annotation.Autowired
     public RunRegistry() {
         this(System::nanoTime);
     }
@@ -92,11 +96,16 @@ public class RunRegistry {
      * deadline measure neglect rather than duration — a wall-clock limit would kill a legitimate long scan, and a
      * limit on scan time alone would misfire during a Core outage in the opposite direction.
      */
+    /**
+     * Records that the platform drove this run. Through {@code computeIfPresent} so it is serialised against the
+     * reaper, which decides and removes inside its own computation on this key; a bare update can land after the
+     * reaper has read the timestamp and before it returns, and the run is then torn down while it is being driven.
+     */
     public void touch(UUID runId) {
-        Entry entry = runs.get(runId);
-        if (entry != null) {
+        runs.computeIfPresent(runId, (key, entry) -> {
             entry.lastDriven.set(ticker.getAsLong());
-        }
+            return entry;
+        });
     }
 
     /**
@@ -196,9 +205,6 @@ public class RunRegistry {
      * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by
      * either would otherwise have every later drain served with no cursor check at all.
      */
-    /** Outside the sequence space, which starts at zero and only grows. */
-    private static final long NOTHING_OWED = -1L;
-
     public void oweDrainVerification(UUID runId, long highWater) {
         Entry entry = runs.get(runId);
         if (entry != null) {
@@ -297,10 +303,8 @@ public class RunRegistry {
             if (run.getValue().lastDriven.get() > cutoff) {
                 continue;
             }
-            // Re-read the timestamp inside the map's own computation rather than trusting the one above. A two-arg
-            // remove would not help: touch() mutates the entry in place, so the value is the same instance either
-            // way, and a lifecycle call landing between the check and the removal would be dropped along with the
-            // run it was driving.
+            // Re-read inside the map's own computation. A two-argument remove would not help: touch() mutates the
+            // entry in place, so the value compares equal either way.
             Entry[] taken = new Entry[1];
             runs.computeIfPresent(run.getKey(), (key, entry) -> {
                 if (entry.lastDriven.get() > cutoff) {
@@ -309,9 +313,8 @@ public class RunRegistry {
                 taken[0] = entry;
                 return null;
             });
-            // Released outside the computation: it stops a scan and closes a buffer, which is not work to do while
-            // holding a bin of the map. By now the run is gone, so a lifecycle call finds nothing and is answered as
-            // a forgotten run, which is the contract's expected answer.
+            // Outside the computation: stopping a scan and closing a buffer is not work to do under a map bin. The
+            // run is gone by now, so a lifecycle call finds nothing, which is the contract's expected answer.
             if (taken[0] != null) {
                 release(taken[0]);
                 abandoned.add(run.getKey());

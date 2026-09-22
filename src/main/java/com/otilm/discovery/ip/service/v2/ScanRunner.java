@@ -22,6 +22,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -266,14 +267,15 @@ public class ScanRunner {
      * Turns one scanned certificate into the items the run asked for.
      *
      * <p>
-     * Its own failure is kept apart from the probe's. A target that did not answer and a certificate this connector
-     * could not map both end as a failed target, but only one of them is our defect, and reporting them the same way
-     * hides it: a mapping that threw for every certificate looks exactly like a range where nothing was listening.
+     * Its own failure is kept apart from the probe's. Both end the target as failed, but only one is our defect,
+     * and a mapping that threw for every certificate otherwise looks like a range with nothing listening.
      */
     private void emit(X509Certificate certificate, String url, ChunkTally tally) throws InterruptedException {
         try {
-            byte[] der = certificate.getEncoded();
             if (resources.contains(Resource.CERTIFICATE)) {
+                // Inside the branch: a keys-only run needs the public key, not the encoding, and reading the DER
+                // first would fail such a run over something it never asked for.
+                byte[] der = certificate.getEncoded();
                 buffer.add(certificateItem(der, url), weightOf(der.length));
                 counted(tally, Resource.CERTIFICATE);
             }
@@ -309,11 +311,8 @@ public class ScanRunner {
     }
 
     /**
-     * The reasons this run's targets failed, commonest first, as "{@code 4094 x SSLHandshakeException}".
-     *
-     * <p>
-     * Without it a wide sweep reports only a count, and every cause reads alike -- a range that is not listening, a
-     * TLS stack that refuses a bare IP, and a bug in this connector all print the same number.
+     * The reasons this run's targets failed, commonest first, as "{@code 4094 x SSLHandshakeException}". Without
+     * it a range that is not listening, a TLS stack refusing a bare IP and a bug here all print the same number.
      */
     String failureSummary() {
         if (failureReasons.isEmpty()) {
@@ -346,11 +345,11 @@ public class ScanRunner {
                     if (handle.state() == RunHandle.RunState.STOPPED) {
                         return handle;
                     }
-                    Map<String, Long> yield = new HashMap<>(handle.yieldByResource());
-                    tally.yield.forEach((resource, count) -> yield.merge(resource, count.get(), Long::sum));
+                    Map<String, Long> merged = new HashMap<>(handle.yieldByResource());
+                    tally.byResource.forEach((resource, count) -> merged.merge(resource, count.get(), Long::sum));
                     return new RunHandle(handle.state(), cursor, buffer.highestSequence(), handle.targetsDigest(),
                             handle.targetsProcessed() + tally.processed.get(),
-                            handle.targetsFailed() + tally.failed.get(), Map.copyOf(yield));
+                            handle.targetsFailed() + tally.failed.get(), Map.copyOf(merged));
                 })
                 .ifPresent(committed -> logger
                         // Per chunk rather than per target: a wide sweep is otherwise silent for its whole duration.
@@ -359,7 +358,7 @@ public class ScanRunner {
     }
 
     private static void counted(ChunkTally tally, Resource resource) {
-        tally.yield.computeIfAbsent(resource.getCode(), key -> new AtomicLong()).incrementAndGet();
+        tally.byResource.computeIfAbsent(resource.getCode(), key -> new AtomicLong()).incrementAndGet();
     }
 
     /** Enough to name what is happening without turning one log line into a report. */
@@ -401,7 +400,7 @@ public class ScanRunner {
         item.setUniqueRef(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(der)));
         item.setPayload(payload);
         item.setMeta(sourceOf(url));
-        item.setDiscoveredAt(OffsetDateTime.now());
+        item.setDiscoveredAt(OffsetDateTime.now(ZoneOffset.UTC));
         return item;
     }
 
@@ -417,15 +416,13 @@ public class ScanRunner {
         item.setUniqueRef(payload.getFingerprint());
         item.setPayload(payload);
         item.setMeta(sourceOf(url));
-        item.setDiscoveredAt(OffsetDateTime.now());
+        item.setDiscoveredAt(OffsetDateTime.now(ZoneOffset.UTC));
         return item;
     }
 
     /**
-     * Everything an item carries besides its payload: a 64-character reference, an ISO timestamp, the resource
-     * discriminator, the source metadata attribute with its URL, and the JSON quoting around all of it. Measured
-     * against a serialised item rather than guessed, and rounded up -- the buffer's bounds exist to keep a page
-     * within what the transport will carry, so the error has to fall on the safe side.
+     * Everything an item carries besides its payload: reference, timestamp, resource, source metadata and JSON
+     * quoting. Measured against a serialised item and rounded up, since the error has to fall on the safe side.
      */
     private static final long ENVELOPE_BYTES = 1_024;
 
@@ -434,10 +431,7 @@ public class ScanRunner {
         return 4L * ((rawBytes + 2) / 3);
     }
 
-    /**
-     * The buffer takes the weight rather than measuring it, and this is the caller that owes it a truthful number:
-     * it has just built the payload, while the buffer would have to serialise the item again to find out.
-     */
+    /** The buffer takes the weight rather than serialising the item again to measure it. */
     static long weightOf(int derLength) {
         return base64Length(derLength) + ENVELOPE_BYTES;
     }
@@ -445,7 +439,7 @@ public class ScanRunner {
     private static final class ChunkTally {
         private final AtomicLong processed = new AtomicLong();
         private final AtomicLong failed = new AtomicLong();
-        private final Map<String, AtomicLong> yield = new java.util.concurrent.ConcurrentHashMap<>();
+        private final Map<String, AtomicLong> byResource = new java.util.concurrent.ConcurrentHashMap<>();
         /** Why targets failed in this chunk, keyed by exception name; merged into the run's totals at the boundary. */
         private final Map<String, AtomicLong> failures = new java.util.concurrent.ConcurrentHashMap<>();
     }

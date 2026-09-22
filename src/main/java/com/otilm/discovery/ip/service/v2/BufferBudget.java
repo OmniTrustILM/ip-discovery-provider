@@ -150,6 +150,13 @@ public class BufferBudget {
                         throw new BufferLimitExceededException("waited " + backpressureWaitMs
                                 + " ms for the drain to free buffer space, limited by " + limitReached(holding, bytes));
                     }
+                    if (holdings.get(runId) != holding) {
+                        // close() detached this holding and signalled. Nothing will ever release against it again,
+                        // so the condition cannot become true and the producer would wait out its whole window
+                        // after the run it belongs to has already ended.
+                        throw new BufferLimitExceededException("run " + runId
+                                + " was closed while a probe waited for buffer space");
+                    }
                 } finally {
                     waiting--;
                 }

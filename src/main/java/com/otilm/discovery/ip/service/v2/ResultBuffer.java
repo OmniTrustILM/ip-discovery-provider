@@ -35,14 +35,14 @@ public class ResultBuffer {
      */
     private final ConcurrentSkipListMap<Long, Held> items = new ConcurrentSkipListMap<>();
 
-    /**
-     * One counter, incremented at insertion. The contract requires dense sequences; ordering across producing threads
-     * is irrelevant, only density is, and a single atomic gives that however many threads produce at once.
-     */
+    /** One counter, incremented at insertion: the contract requires dense sequences, not ordered ones. */
     private final AtomicLong sequencer;
 
     /** The highest cursor any drain has acknowledged. Items at or below it are the connector's to discard. */
     private final AtomicLong discardWatermark = new AtomicLong(0);
+
+    /** Set by {@link #close()}, so a producer past its reservation cannot publish into a cleared map. */
+    private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
 
     private record Held(DiscoveredItemDto item, long bytes) {
     }
@@ -58,11 +58,8 @@ public class ResultBuffer {
     }
 
     /**
-     * Numbers an item and holds it, blocking while the buffer is full.
-     *
-     * <p>
-     * The weight is supplied rather than measured: the producer has just built the payload and knows its size, while
-     * the buffer would have to serialize the item again to find out.
+     * Numbers an item and holds it, blocking while the buffer is full. The weight is supplied by the producer,
+     * which has just built the payload.
      *
      * @return the sequence assigned
      * @throws InterruptedException if the scan is stopped while blocked, which is how a stop reaches a parked probe
@@ -71,6 +68,10 @@ public class ResultBuffer {
         budget.acquire(runId, weightBytes);
         long sequence = sequencer.incrementAndGet();
         item.setSequence(sequence);
+        if (closed.get()) {
+            // The budget went back with the close, so there is nothing to release here.
+            throw new InterruptedException("run " + runId + " closed while an item was being published");
+        }
         items.put(sequence, new Held(item, weightBytes));
         return sequence;
     }
@@ -94,7 +95,8 @@ public class ResultBuffer {
             logger
                     .info("Run {} drained at cursor {}, below the discard watermark {}; answering an empty page",
                             runId, afterSequence, discardWatermark.get());
-            return new Page(List.of(), highestSequence(), false);
+            // The watermark, not the sequencer, which would let Core advance past items still held here.
+            return new Page(List.of(), discardWatermark.get(), !items.isEmpty());
         }
 
         List<DiscoveredItemDto> page = new ArrayList<>();
@@ -103,17 +105,14 @@ public class ResultBuffer {
         long next = afterSequence + 1;
         for (Map.Entry<Long, Held> entry : items.tailMap(afterSequence, false).entrySet()) {
             if (entry.getKey() != next) {
-                // A sequence below this one is numbered and not yet in the map: a producer is between its
-                // incrementAndGet and its put. Serving past it would hand Core a cursor above an item it has never
-                // seen, and Core's filter drops anything at or below its cursor -- so that item would be lost on a
-                // run that then completes successfully. The gap closes on its own: an add that has taken a sequence
-                // always reaches the put.
+                // A lower sequence is numbered but not yet published. Serving past it would put Core's cursor above
+                // an item it never received, and Core drops anything at or below its cursor. The gap closes on its
+                // own, since an add that has taken a sequence always reaches its put.
                 more = true;
                 break;
             }
             if (page.isEmpty() && entry.getValue().bytes() > maxBytes) {
-                // Nothing can carry this item, and answering an empty page with more=true would have Core retry the
-                // same cursor forever. The run has to say so instead.
+                // An empty page with more=true would have Core retry this cursor forever.
                 throw new BufferBudget.BufferLimitExceededException("Run " + runId + " holds an item of "
                         + entry.getValue().bytes() + " bytes at sequence " + entry.getKey()
                         + ", which exceeds the " + maxBytes + " bytes a page can carry");
@@ -126,8 +125,7 @@ public class ResultBuffer {
             bytes += entry.getValue().bytes();
             next++;
         }
-        // The last sequence this page can vouch for, which is where Core's cursor may safely land. Not the
-        // sequencer's value: that counts numbers already taken by producers who have not published yet.
+        // What this page can vouch for, not the sequencer: that counts numbers taken but not yet published.
         return new Page(page, next - 1, more);
     }
 
@@ -164,6 +162,7 @@ public class ResultBuffer {
 
     /** Releases the whole run's budget. A cancelled or completed run holds nothing. */
     public void close() {
+        closed.set(true);
         items.clear();
         budget.close(runId);
     }
