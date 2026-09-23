@@ -26,6 +26,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -88,11 +89,13 @@ public class DiscoveryRunService {
             case AT_CAPACITY ->
                 throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
             case ALREADY_HELD -> {
-                // A concurrent initiate for the same run got here first and is still registering. The contract wants
-                // the repeat answered idempotently, so it is answered with the same checkpoint the winner started
-                // from, not with a claim that the node is full.
+                // A concurrent initiate for the same run got here first. The contract wants the repeat answered
+                // idempotently, so it is answered with the checkpoint the winner started from rather than with a
+                // claim that the node is full -- but only once the winner is visible. Answering from our own handle
+                // while the registry is still empty hands back a RUNNING checkpoint that cannot be rebuilt, so the
+                // caller's next status or drain is a terminal 404 on an initiate that just succeeded.
                 logger.info("Run {} is already being started; answering the concurrent initiate idempotently", runId);
-                return accepted(registry.find(runId).orElse(handle));
+                return accepted(awaitRegistration(runId).orElse(handle));
             }
             case ADMITTED -> {
                 if (!registry.register(runId, handle)) {
@@ -160,9 +163,55 @@ public class DiscoveryRunService {
 
         DiscoveryResultsResponseDto response = new DiscoveryResultsResponseDto();
         response.setItems(page.items());
-        response.setHighestSequence(page.highestSequence());
+        // Run-wide, as the field is defined -- "never page-scoped". The page's own contiguous end decides what may be
+        // served, not what this reports, and Core advances its cursor by the sequences it actually received.
+        response.setHighestSequence(buffer.highestSequence());
         response.setMore(page.more());
+        releaseIfFullyAcknowledged(runId, buffer, request.getAfterSequence());
         return response;
+    }
+
+    /**
+     * Lets a terminal run go once Core holds everything it produced. The contract retains a terminal run for 24 hours
+     * or until it is fully acknowledged, whichever comes first, and this is the second half.
+     *
+     * <p>
+     * Without it a finished run keeps its slot until the idle reaper fires half an hour after the acknowledging
+     * drain, because Core stops driving a run it has finished with. Eight of those inside that window and the next
+     * initiate is refused as a full node, which Core reports as a discovery that failed because the connector was
+     * unreachable.
+     */
+    private void releaseIfFullyAcknowledged(UUID runId, ResultBuffer buffer, long afterSequence) {
+        DiscoveryRunState state = registry.state(runId).orElse(null);
+        if (state == null || !TERMINAL.contains(state)) {
+            return;
+        }
+        if (afterSequence < buffer.highestSequence() || buffer.held() > 0) {
+            return;
+        }
+        if (registry.release(runId)) {
+            logger
+                    .info("Run {} released: {} acknowledged everything it produced up to sequence {}", runId, state,
+                            afterSequence);
+        }
+    }
+
+    /**
+     * The winner's handle, once it has registered. Bounded: a winner that never registers failed, and the repeat is
+     * then answered from its own handle rather than held indefinitely.
+     */
+    private Optional<RunHandle> awaitRegistration(UUID runId) {
+        long deadline = System.nanoTime() + REGISTRATION_WAIT_NANOS;
+        Optional<RunHandle> found = registry.find(runId);
+        while (found.isEmpty() && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+            found = registry.find(runId);
+        }
+        if (found.isEmpty()) {
+            logger.warn("Run {} was admitted by another initiate that has not registered it; answering from the "
+                    + "request's own checkpoint", runId);
+        }
+        return found;
     }
 
     /**
@@ -176,6 +225,20 @@ public class DiscoveryRunService {
 
         // Marked stopped before the scan is asked to stop, so a chunk finishing in between cannot move the
         // checkpoint after this call has answered with one.
+        DiscoveryRunState current = registry.state(runId).orElse(null);
+        if (current != null && TERMINAL.contains(current)) {
+            // Core allows a stop while its own status is IN_PROGRESS, which it keeps through the tail drain after
+            // this connector has reported COMPLETED. Relabelling here would tell Core a finished run is stopped, and
+            // a stop landing after FAILED would hide why it failed.
+            logger.info("Run {} already ended as {}; the stop is a no-op", runId, current);
+            DiscoveryStopResponseDto ended = new DiscoveryStopResponseDto();
+            ended
+                    .setCheckpoint(registry
+                            .find(runId)
+                            .orElseThrow(() -> new UnknownRunException(runId))
+                            .encode());
+            return ended;
+        }
         registry.update(runId, handle -> handle.withState(RunHandle.RunState.STOPPED));
         registry.setState(runId, DiscoveryRunState.STOPPED);
         registry.runner(runId).ifPresent(ScanRunner::stop);
@@ -245,6 +308,12 @@ public class DiscoveryRunService {
             // Put the run back where it was, so a corrected retry can still resume it rather than finding a run
             // marked running that nothing is scanning.
             registry.compareAndSetState(runId, DiscoveryRunState.RUNNING, DiscoveryRunState.STOPPED);
+            if (registry.find(runId).isEmpty()) {
+                // A cancel completed between the state change and here. It closed no holding, because the budget is
+                // taken below it; without this the holding outlives the entry and the reaper has nothing to find, so
+                // the node is down one scanning slot until it restarts.
+                budget.close(runId);
+            }
             throw e;
         }
     }
@@ -322,6 +391,10 @@ public class DiscoveryRunService {
             logger
                     .warn("Refusing to serve rebuilt run {}: Core is at sequence {} and the checkpoint at {}", runId,
                             afterSequence, owed);
+            // Core reads this 404 as terminal and sends no cancel, so nothing else would ever release what the run
+            // holds: a resumed scan would run to the end of its enumeration against a run Core has already given up
+            // on, keeping its slot until the reaper.
+            registry.release(runId);
             throw new UnknownRunException(runId);
         }
         registry.drainVerified(runId);
@@ -354,6 +427,13 @@ public class DiscoveryRunService {
 
     /** How long a stop waits for an interrupted scan to unwind before checkpointing regardless. */
     private static final Duration SCAN_SETTLE = Duration.ofSeconds(10);
+
+    /** States a run does not leave. A terminal run produces nothing more, so a full acknowledgement ends it here. */
+    private static final Set<DiscoveryRunState> TERMINAL =
+            EnumSet.of(DiscoveryRunState.COMPLETED, DiscoveryRunState.FAILED, DiscoveryRunState.CANCELLED);
+
+    /** How long a repeated initiate waits for the winner to become visible before answering from its own handle. */
+    private static final long REGISTRATION_WAIT_NANOS = Duration.ofSeconds(1).toNanos();
 
     /**
      * The checkpoint indexes into an enumeration, so it can only be continued against the same one. Any change to

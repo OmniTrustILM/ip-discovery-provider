@@ -261,27 +261,32 @@ class DiscoveryRunServiceTest {
 
         Assertions.assertTrue(results.getItems().isEmpty());
         Assertions
-                .assertEquals(3L, results.getHighestSequence(),
-                        "an empty page vouches for the acknowledged cursor, not for items it is still holding");
+                .assertEquals(4L, results.getHighestSequence(),
+                        "the field is run-wide and never page-scoped, whatever this page could serve");
         Assertions.assertEquals(Boolean.TRUE, results.getMore(), "sequence 4 is still here");
     }
 
     // --- stop, resume, cancel ---
 
+    /**
+     * Core allows a stop while its own status is still IN_PROGRESS, which it stays through the tail drain after this
+     * connector has reported the run complete. Relabelling then would tell Core a finished run is merely stopped,
+     * and it would sit there until somebody resumed it. Stopping a run that is genuinely scanning is what
+     * StopResumeSeamTest covers.
+     */
     @Test
-    void stopMarksTheRunStoppedAndCheckpointsIt() {
+    void leavesARunThatHasAlreadyFinishedAlone() {
         UUID runId = UUID.randomUUID();
         service.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
         awaitCompletion(runId);
 
         var stopped = service.stop(runRequest(runId));
 
+        Assertions
+                .assertEquals(DiscoveryRunState.COMPLETED, registry.state(runId).orElseThrow(),
+                        "a completed run must not be relabelled by a late stop");
         RunHandle handle = RunHandle.from(stopped.getCheckpoint()).orElseThrow();
-        Assertions.assertEquals(RunHandle.RunState.STOPPED, handle.state());
-        Assertions.assertEquals(DiscoveryRunState.STOPPED, registry.state(runId).orElseThrow());
-        // This is the already-finished case, where the boundary value and the buffer counter agree anyway. The
-        // interrupted-chunk case, where they do not, is what StopResumeSeamTest exists for.
-        Assertions.assertEquals(4L, handle.sequenceHighWater());
+        Assertions.assertEquals(4L, handle.sequenceHighWater(), "the checkpoint still describes what it produced");
     }
 
     @Test

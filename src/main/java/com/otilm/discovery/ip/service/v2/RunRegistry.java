@@ -114,6 +114,8 @@ public class RunRegistry {
             entry.runner.set(runner);
             entry.buffer.set(buffer);
             if (runner != null) {
+                // The previous attempt's future is finished and would satisfy a wait that belongs to this one.
+                entry.scan.set(null);
                 entry.scanExpected.set(true);
             }
             return entry;
