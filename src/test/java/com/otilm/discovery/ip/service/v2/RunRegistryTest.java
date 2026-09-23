@@ -2,6 +2,7 @@ package com.otilm.discovery.ip.service.v2;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
 
@@ -401,6 +402,44 @@ class RunRegistryTest {
 
         Assertions.assertEquals(List.of(), tickedRegistry.abandonIdle(Duration.ofMinutes(30)));
         Assertions.assertTrue(tickedRegistry.find(runId).isPresent(), "a run driven just now is not idle");
+    }
+
+
+    /**
+     * A release landing between register and attach leaves the caller holding a runner and a buffer the registry
+     * will never see. Told it lost, the caller can close them; told nothing, it submits a scan that runs untracked
+     * and keeps one of the node's run slots for good.
+     */
+    @Test
+    void reportsWhenAnAttachmentLostToARelease() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+
+        Assertions.assertTrue(registry.attach(runId, null, null), "the run is still here");
+
+        registry.release(runId);
+
+        Assertions.assertFalse(registry.attach(runId, null, null), "the run went away while this was being built");
+    }
+
+    /**
+     * A runner is attached before its future is submitted. A stop landing between the two used to find no scan and
+     * report the run settled, so the checkpoint was taken while items were still being numbered.
+     */
+    @Test
+    void doesNotCallARunSettledWhileItsScanIsStillBeingSubmitted() {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+        ResultBuffer buffer = new ResultBuffer(runId, new BufferBudget(1, 100, 1L << 30, 1L << 31, 30_000), 0);
+
+        registry.attach(runId, null, buffer);
+        Assertions.assertTrue(registry.awaitScan(runId, Duration.ofMillis(50)), "no runner, so no scan is coming");
+
+        registry.attach(runId, Mockito.mock(ScanRunner.class), buffer);
+
+        Assertions
+                .assertFalse(registry.awaitScan(runId, Duration.ofMillis(50)),
+                        "a runner is attached, so its scan is still on its way");
     }
 
 }

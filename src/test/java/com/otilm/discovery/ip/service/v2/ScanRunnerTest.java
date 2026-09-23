@@ -462,4 +462,32 @@ class ScanRunnerTest {
         Assertions.assertEquals("", runner.failureSummary());
     }
 
+
+    /**
+     * Publishing the certificate and then failing on the key left Core holding an item for a target the run went on
+     * to report as failed, and abandoned the rest of the chain with the loss recorded nowhere.
+     */
+    @Test
+    void publishesNeitherItemWhenTheKeyCannotBeMapped() throws Exception {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.2", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+
+        java.security.PublicKey unreadable = Mockito.mock(java.security.PublicKey.class);
+        Mockito.when(unreadable.getEncoded()).thenReturn(null);
+        X509Certificate half = Mockito.mock(X509Certificate.class);
+        Mockito.when(half.getEncoded()).thenReturn(new byte[] {1, 2, 3});
+        Mockito.when(half.getPublicKey()).thenReturn(unreadable);
+
+        ScanRunner runner = runner(runId, targets, buffer,
+                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {half}), 4,
+                Set.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY));
+        runner.scan();
+
+        Assertions.assertEquals(0, buffer.held(), "no half of the pair may reach Core when the other cannot be built");
+        Assertions.assertEquals(2, registry.find(runId).orElseThrow().targetsFailed());
+        Assertions.assertTrue(runner.failureSummary().contains("item:"), runner.failureSummary());
+    }
+
 }

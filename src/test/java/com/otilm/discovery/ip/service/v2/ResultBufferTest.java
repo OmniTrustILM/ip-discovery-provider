@@ -391,4 +391,34 @@ class ResultBufferTest {
         Assertions.assertEquals(1, buffer.held(), "the item published before the close is untouched");
     }
 
+
+    /**
+     * Acknowledging past what the run has issued would mark unissued numbers discarded, and every item later given
+     * one of them would be answered as already taken — silent loss on a run that completes.
+     */
+    @Test
+    void refusesAnAcknowledgementAboveTheSequencesItHasIssued() throws Exception {
+        UUID runId = UUID.randomUUID();
+        ResultBuffer buffer = buffer(roomyBudget(), runId, 0);
+        buffer.add(item("one"), ITEM_BYTES);
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> buffer.discardThrough(100));
+        Assertions.assertDoesNotThrow(() -> buffer.discardThrough(1));
+    }
+
+    /** A resumed buffer continues a sequence space whose earlier items were handed over before the stop. */
+    @Test
+    void startsAResumedWatermarkWhereItsSequenceSpaceStarts() {
+        UUID runId = UUID.randomUUID();
+        ResultBuffer resumed = buffer(roomyBudget(), runId, 5000);
+
+        ResultBuffer.Page page = resumed.page(4500, 10, 1L << 20);
+
+        Assertions.assertTrue(page.items().isEmpty());
+        Assertions
+                .assertEquals(5000, page.highestSequence(),
+                        "a cursor below the checkpoint is behind the watermark, not a gap to wait on");
+        Assertions.assertFalse(page.more());
+    }
+
 }

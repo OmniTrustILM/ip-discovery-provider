@@ -38,11 +38,21 @@ public class ResultBuffer {
     /** One counter, incremented at insertion: the contract requires dense sequences, not ordered ones. */
     private final AtomicLong sequencer;
 
-    /** The highest cursor any drain has acknowledged. Items at or below it are the connector's to discard. */
-    private final AtomicLong discardWatermark = new AtomicLong(0);
+    /**
+     * The highest cursor any drain has acknowledged. Items at or below it are the connector's to discard. Seeded
+     * from the resumed run's sequence space: everything up to the checkpoint was handed over before the stop.
+     */
+    private final AtomicLong discardWatermark;
 
     /** Set by {@link #close()}, so a producer past its reservation cannot publish into a cleared map. */
     private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * Held across the closed check and the publication, and across the close that invalidates them. Checking the
+     * flag and then putting as two steps leaves a window where a close lands between, and the item is published
+     * into a map that has just been cleared.
+     */
+    private final Object publication = new Object();
 
     private record Held(DiscoveredItemDto item, long bytes) {
     }
@@ -55,6 +65,7 @@ public class ResultBuffer {
         this.runId = runId;
         this.budget = budget;
         this.sequencer = new AtomicLong(startingSequence);
+        this.discardWatermark = new AtomicLong(startingSequence);
     }
 
     /**
@@ -68,11 +79,13 @@ public class ResultBuffer {
         budget.acquire(runId, weightBytes);
         long sequence = sequencer.incrementAndGet();
         item.setSequence(sequence);
-        if (closed.get()) {
-            // The budget went back with the close, so there is nothing to release here.
-            throw new InterruptedException("run " + runId + " closed while an item was being published");
+        synchronized (publication) {
+            if (closed.get()) {
+                // The budget went back with the close, so there is nothing to release here.
+                throw new InterruptedException("run " + runId + " closed while an item was being published");
+            }
+            items.put(sequence, new Held(item, weightBytes));
         }
-        items.put(sequence, new Held(item, weightBytes));
         return sequence;
     }
 
@@ -134,6 +147,12 @@ public class ResultBuffer {
      * frees nothing the second time, which is what makes a re-published tick harmless.
      */
     public void discardThrough(long sequence) {
+        if (sequence > sequencer.get()) {
+            // Acknowledging a sequence this run has never issued would mark the numbers up to it discarded, and every
+            // item later given one of them would then be answered as already taken.
+            throw new IllegalArgumentException("run " + runId + " was acknowledged through sequence " + sequence
+                    + ", above the " + sequencer.get() + " it has issued");
+        }
         long previous = discardWatermark.getAndAccumulate(sequence, Math::max);
         if (sequence <= previous) {
             return;
@@ -162,8 +181,10 @@ public class ResultBuffer {
 
     /** Releases the whole run's budget. A cancelled or completed run holds nothing. */
     public void close() {
-        closed.set(true);
-        items.clear();
+        synchronized (publication) {
+            closed.set(true);
+            items.clear();
+        }
         budget.close(runId);
     }
 

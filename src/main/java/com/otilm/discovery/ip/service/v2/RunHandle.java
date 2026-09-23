@@ -121,7 +121,12 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
         if (!(content instanceof List<?> items) || items.isEmpty()) {
             throw new ValidationException("Run checkpoint carries no content");
         }
-        Object data = ((com.otilm.api.model.common.attribute.common.AttributeContent) items.get(0)).getData();
+        if (!(items.get(0) instanceof com.otilm.api.model.common.attribute.common.AttributeContent first)) {
+            // Cast rather than checked, the content list is Object-typed: a foreign or future encoding under this
+            // UUID would otherwise surface as a ClassCastException where the javadoc promises a validation failure.
+            throw new ValidationException("Run checkpoint content is not an attribute content");
+        }
+        Object data = first.getData();
         if (!(data instanceof String json) || json.isBlank()) {
             throw new ValidationException("Run checkpoint content is not readable text");
         }

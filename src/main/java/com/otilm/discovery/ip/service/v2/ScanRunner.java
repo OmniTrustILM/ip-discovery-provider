@@ -271,31 +271,43 @@ public class ScanRunner {
      * and a mapping that threw for every certificate otherwise looks like a range with nothing listening.
      */
     private void emit(X509Certificate certificate, String url, ChunkTally tally) throws InterruptedException {
+        // Both items are built before either is published. Publishing the certificate and then failing to map the
+        // key would leave Core holding an item for a target this run goes on to report as failed, and would abandon
+        // the rest of the chain with the loss recorded nowhere.
+        DiscoveredItemDto certificateItem = null;
+        long certificateWeight = 0;
+        DiscoveredItemDto keyItem = null;
+        long keyWeight = 0;
         try {
             if (resources.contains(Resource.CERTIFICATE)) {
-                // Inside the branch: a keys-only run needs the public key, not the encoding, and reading the DER
-                // first would fail such a run over something it never asked for.
+                // A keys-only run needs the public key, not the encoding, and reading the DER first would fail such
+                // a run over something it never asked for.
                 byte[] der = certificate.getEncoded();
-                buffer.add(certificateItem(der, url), weightOf(der.length));
-                counted(tally, Resource.CERTIFICATE);
+                certificateItem = certificateItem(der, url);
+                certificateWeight = weightOf(der.length);
             }
             // Driven by the run's resource set rather than always on: a key per certificate roughly doubles item
             // count, sequence consumption and buffer occupancy.
             if (resources.contains(Resource.CRYPTOGRAPHIC_KEY)) {
-                DiscoveredItemDto key = keyItem(certificate, url);
+                keyItem = keyItem(certificate, url);
                 // From the key's own material rather than a constant: a post-quantum SPKI runs to several kilobytes,
                 // which a fixed figure sized for RSA would charge as though it were a few hundred bytes.
-                buffer.add(key, base64Length(certificate.getPublicKey().getEncoded().length) + ENVELOPE_BYTES);
-                counted(tally, Resource.CRYPTOGRAPHIC_KEY);
+                keyWeight = base64Length(certificate.getPublicKey().getEncoded().length) + ENVELOPE_BYTES;
             }
-        } catch (InterruptedException | BufferBudget.BufferLimitExceededException e) {
-            // Both mean the run itself is ending. Neither is a mapping fault, so they travel to the probe's handling.
-            throw e;
         } catch (Exception e) {
-            // Warned rather than debugged: the target answered, so this is the connector failing to use what it got.
             logger.warn("Run {} could not map a certificate from {}: {}", runId, url, e.toString());
             recordFailure(tally, ITEM_FAILURE_PREFIX + e.getClass().getSimpleName());
             throw new ItemNotMappedException(e);
+        }
+        // Nothing here maps: add throws only for a stop or a bound the run cannot wait out, and both mean the run
+        // itself is ending, so they travel to the probe untouched.
+        if (certificateItem != null) {
+            buffer.add(certificateItem, certificateWeight);
+            counted(tally, Resource.CERTIFICATE);
+        }
+        if (keyItem != null) {
+            buffer.add(keyItem, keyWeight);
+            counted(tally, Resource.CRYPTOGRAPHIC_KEY);
         }
     }
 

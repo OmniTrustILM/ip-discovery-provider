@@ -239,4 +239,20 @@ class RunHandleTest {
         return RunHandle.from(List.of(checkpointOf(json))).orElseThrow();
     }
 
+
+    /** The content list is Object-typed, so a foreign shape must fail as validation rather than as a raw cast. */
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void refusesContentThatIsNotAnAttributeContent() {
+        MetadataAttributeV3 attribute = new MetadataAttributeV3();
+        attribute.setUuid(RunHandle.ATTRIBUTE_UUID);
+        attribute.setName(RunHandle.ATTRIBUTE_NAME);
+        attribute.setType(AttributeType.META);
+        attribute.setContentType(AttributeContentType.STRING);
+        attribute.setContent((List) new java.util.ArrayList<>(List.of("not an attribute content")));
+        List<MetadataAttribute> meta = List.of(attribute);
+
+        Assertions.assertThrows(ValidationException.class, () -> RunHandle.from(meta));
+    }
+
 }

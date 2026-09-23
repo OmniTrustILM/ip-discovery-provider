@@ -58,6 +58,9 @@ public class RunRegistry {
         /** Zero means not yet known, which is why it is reported as absent rather than as a total of nought. */
         private final AtomicLong targetsTotal = new AtomicLong();
         private final AtomicReference<Future<?>> scan = new AtomicReference<>();
+        /** Set when a runner is attached, so a wait can tell "no scan yet" from "no scan at all". */
+        private final java.util.concurrent.atomic.AtomicBoolean scanExpected =
+                new java.util.concurrent.atomic.AtomicBoolean();
         /**
          * Set when a run is rebuilt from a replayed checkpoint, and cleared by the first drain that proves Core is
          * exactly at it. {@link #NOTHING_OWED} means none is owed -- not zero, which is the high water of a run
@@ -82,13 +85,19 @@ public class RunRegistry {
      * Gives the registry the means to release a run it later has to abandon: the scan to stop, and the buffer whose
      * budget has to go back. Without the buffer the run's slot and bytes stay charged after it is gone, and the node
      * refuses new runs long after it has any.
+     *
+     * @return false if the run was released while this attachment was being prepared, in which case the caller owns
+     *         what it built and has to close it -- otherwise the scan runs untracked and its budget slot is lost
      */
-    public void attach(UUID runId, ScanRunner runner, ResultBuffer buffer) {
-        Entry entry = runs.get(runId);
-        if (entry != null) {
+    public boolean attach(UUID runId, ScanRunner runner, ResultBuffer buffer) {
+        return runs.computeIfPresent(runId, (key, entry) -> {
             entry.runner.set(runner);
             entry.buffer.set(buffer);
-        }
+            if (runner != null) {
+                entry.scanExpected.set(true);
+            }
+            return entry;
+        }) != null;
     }
 
     /**
@@ -179,10 +188,20 @@ public class RunRegistry {
      */
     public boolean awaitScan(UUID runId, Duration within) {
         Entry entry = runs.get(runId);
-        Future<?> scan = entry == null ? null : entry.scan.get();
-        if (scan == null) {
+        if (entry == null) {
             return true;
         }
+        long deadline = System.nanoTime() + within.toNanos();
+        // A runner is attached before its future is submitted, so a stop landing between the two would otherwise
+        // find no scan and report the run settled while it is still numbering items.
+        while (entry.scan.get() == null && entry.scanExpected.get() && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
+        Future<?> scan = entry.scan.get();
+        if (scan == null) {
+            return !entry.scanExpected.get();
+        }
+        within = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
         try {
             scan.get(within.toMillis(), TimeUnit.MILLISECONDS);
             return true;
