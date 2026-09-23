@@ -59,7 +59,6 @@ class InfoControllerImplTest {
                         "Core rejects a connector missing any mandatory interface; advertised: " + advertised);
     }
 
-    /** The same validation also demands one functional interface beside the mandatory common ones. */
     @Test
     void advertisesAFunctionalInterface() {
         Assertions

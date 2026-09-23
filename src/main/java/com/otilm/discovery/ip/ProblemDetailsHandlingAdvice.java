@@ -166,9 +166,14 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     }
 
     /**
-     * Another node may have room, and this one will once a run finishes — but Core does not act on that today: it
-     * ends the run on any initiate failure and renders this code as the connector being unreachable, so an operator
-     * whose node is merely full is told it is down. Saying so honestly needs a capacity code in the contract.
+     * A node at its run cap, answered as retryable.
+     *
+     * <p>
+     * <b>Current Core behaviour:</b> Core does not retry. It ends the run on any initiate failure and renders this
+     * code as the connector being unreachable, so an operator whose node is merely full is told it is down.
+     *
+     * <p>
+     * <b>Contract gap:</b> saying so honestly needs a capacity code in the contract.
      */
     @ExceptionHandler(NodeAtCapacityException.class)
     public ProblemDetail handleNodeAtCapacity(NodeAtCapacityException ex) {

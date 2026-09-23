@@ -230,8 +230,8 @@ class StopResumeSeamTest {
 
     /**
      * The verdict on whether a rebuilt run lost anything has to apply however the run was rebuilt. Core expedites the
-     * drain on a successful resume, so it arrives at a run resume has already registered — the path where the check
-     * used to be skipped entirely, and the one the design says the verdict exists for.
+     * drain on a successful resume, so it arrives at a run resume has already registered, and the cursor check must
+     * still apply there.
      */
     @Test
     void refusesToServeARunRebuiltByResumeUntilADrainProvesNothingWasLost() {
@@ -251,7 +251,10 @@ class StopResumeSeamTest {
                         "a resumed-then-rebuilt run must not serve across the gap");
     }
 
-    /** The same run serves normally once a drain arrives at exactly the checkpoint it was rebuilt from. */
+    /**
+     * The verification is owed once. Left owed, every later drain would be checked against the rebuild's high water,
+     * and the first one after a resume produced anything would be refused as a gap.
+     */
     @Test
     void servesARebuiltRunOnceADrainArrivesAtTheCheckpoint() {
         UUID runId = UUID.randomUUID();
@@ -264,7 +267,7 @@ class StopResumeSeamTest {
         service.status(runRequest(runId, checkpoint.encode()));
 
         Assertions.assertDoesNotThrow(() -> service.results(drainRequest(runId, checkpoint.encode(), 40)));
-        // Verified once and not owed again.
+        Assertions.assertTrue(registry.drainVerificationOwed(runId).isEmpty(), "the first matching drain settles it");
         Assertions.assertDoesNotThrow(() -> service.results(drainRequest(runId, checkpoint.encode(), 40)));
     }
 }

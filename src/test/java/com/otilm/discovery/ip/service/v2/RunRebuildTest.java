@@ -118,8 +118,8 @@ class RunRebuildTest {
     // --- the rule that makes the deferred verdict safe ---
 
     /**
-     * The highest-value test here: the failure it prevents completes successfully. Core is behind the checkpoint, so
-     * items exist that it never received and that cannot be regenerated — sequence to target is not a function.
+     * The failure this prevents completes successfully. Core is behind the checkpoint, so items exist that it never
+     * received and that cannot be regenerated — sequence to target is not a function.
      */
     @Test
     void neverServesARebuiltRunWhileCoreIsBehindTheCheckpoint() {
