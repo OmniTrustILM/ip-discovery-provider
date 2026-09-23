@@ -98,7 +98,8 @@ public class DiscoveryRunService {
                 return accepted(awaitRegistration(runId).orElse(handle));
             }
             case ADMITTED -> {
-                if (!registry.register(runId, handle)) {
+                boolean registered = registry.register(runId, handle);
+                if (!registered) {
                     budget.close(runId);
                     return accepted(registry.find(runId).orElse(handle));
                 }
@@ -457,9 +458,9 @@ public class DiscoveryRunService {
     private DiscoveryProgressDto progressOf(UUID runId) {
         RunHandle handle = registry.find(runId).orElseThrow(() -> new UnknownRunException(runId));
         Long total = registry.targetsTotal(runId).orElse(null);
-        Map<String, Long> yield = handle.yieldByResource();
+        Map<String, Long> discovered = handle.yieldByResource();
 
-        if (total == null && handle.targetsProcessed() == 0 && yield.isEmpty()) {
+        if (total == null && handle.targetsProcessed() == 0 && discovered.isEmpty()) {
             return null;
         }
 
@@ -491,9 +492,9 @@ public class DiscoveryRunService {
         // Named only when it explains a run that looks stalled; a phase on a healthy run is noise Core would keep.
         progress.setPhase(budget.isBackpressured() ? "backpressured" : null);
 
-        if (!yield.isEmpty()) {
+        if (!discovered.isEmpty()) {
             Map<Resource, DiscoveryResourceProgressDto> byResource = new LinkedHashMap<>();
-            yield.forEach((code, items) -> {
+            discovered.forEach((code, items) -> {
                 DiscoveryResourceProgressDto resourceProgress = new DiscoveryResourceProgressDto();
                 resourceProgress.setProduced(items);
                 // No estimate: one target yields anywhere from no items to a whole chain, so any total would be a

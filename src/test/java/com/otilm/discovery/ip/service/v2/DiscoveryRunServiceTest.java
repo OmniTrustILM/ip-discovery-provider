@@ -189,9 +189,8 @@ class DiscoveryRunServiceTest {
         service.initiate(initiateRequest(UUID.randomUUID(), "10.0.0.1"));
         service.initiate(initiateRequest(UUID.randomUUID(), "10.0.0.2"));
 
-        Assertions
-                .assertThrows(NodeAtCapacityException.class,
-                        () -> service.initiate(initiateRequest(UUID.randomUUID(), "10.0.0.3")));
+        var third = initiateRequest(UUID.randomUUID(), "10.0.0.3");
+        Assertions.assertThrows(NodeAtCapacityException.class, () -> service.initiate(third));
     }
 
     @Test
@@ -311,8 +310,9 @@ class DiscoveryRunServiceTest {
 
         service.cancel(runRequest(runId));
 
-        Assertions.assertThrows(UnknownRunException.class, () -> service.status(runRequest(runId)));
-        Assertions.assertThrows(UnknownRunException.class, () -> service.cancel(runRequest(runId)));
+        var request = runRequest(runId);
+        Assertions.assertThrows(UnknownRunException.class, () -> service.status(request));
+        Assertions.assertThrows(UnknownRunException.class, () -> service.cancel(request));
         Assertions.assertEquals(0, budget.openRuns(), "a cancelled run leaves nothing charged");
     }
 

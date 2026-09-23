@@ -245,9 +245,9 @@ class StopResumeSeamTest {
         service.resume(runRequest(runId, checkpoint.encode()));
 
         // Core is behind the checkpoint: items 31..40 were produced and never handed over.
+        var behind = drainRequest(runId, checkpoint.encode(), 30);
         Assertions
-                .assertThrows(UnknownRunException.class,
-                        () -> service.results(drainRequest(runId, checkpoint.encode(), 30)),
+                .assertThrows(UnknownRunException.class, () -> service.results(behind),
                         "a resumed-then-rebuilt run must not serve across the gap");
     }
 

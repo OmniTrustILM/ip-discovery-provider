@@ -126,8 +126,9 @@ class RunRebuildTest {
         UUID runId = UUID.randomUUID();
         RunHandle handle = stoppedHandle(8, 40);
 
+        var behind = drainRequest(runId, handle, 30);
         Assertions
-                .assertThrows(UnknownRunException.class, () -> service.results(drainRequest(runId, handle, 30)),
+                .assertThrows(UnknownRunException.class, () -> service.results(behind),
                         "items between Core's cursor and the high water are missing and cannot be reproduced");
         Assertions.assertEquals(0, budget.openRuns(), "a refused drain must not leave a run charged");
     }
@@ -138,7 +139,8 @@ class RunRebuildTest {
         UUID runId = UUID.randomUUID();
         RunHandle handle = stoppedHandle(8, 40);
 
-        Assertions.assertThrows(UnknownRunException.class, () -> service.results(drainRequest(runId, handle, 41)));
+        var ahead = drainRequest(runId, handle, 41);
+        Assertions.assertThrows(UnknownRunException.class, () -> service.results(ahead));
     }
 
     /** Equal means Core already holds everything the run produced, so the rebuilt run has nothing to hide. */
@@ -167,8 +169,9 @@ class RunRebuildTest {
         UUID runId = UUID.randomUUID();
         RunHandle running = new RunHandle(RunHandle.RunState.RUNNING, 0L, 0L, digest(), 0L, 0L, Map.of());
 
-        Assertions.assertThrows(UnknownRunException.class, () -> service.status(runRequest(runId, running, HOSTS)));
-        Assertions.assertThrows(UnknownRunException.class, () -> service.resume(runRequest(runId, running, HOSTS)));
+        var request = runRequest(runId, running, HOSTS);
+        Assertions.assertThrows(UnknownRunException.class, () -> service.status(request));
+        Assertions.assertThrows(UnknownRunException.class, () -> service.resume(request));
     }
 
     @Test
@@ -234,8 +237,7 @@ class RunRebuildTest {
         UUID runId = UUID.randomUUID();
         RunHandle handle = stoppedHandle(8, 40);
 
-        Assertions
-                .assertThrows(CheckpointLostException.class,
-                        () -> service.resume(runRequest(runId, handle, "10.0.0.1-10.0.0.9")));
+        var elsewhere = runRequest(runId, handle, "10.0.0.1-10.0.0.9");
+        Assertions.assertThrows(CheckpointLostException.class, () -> service.resume(elsewhere));
     }
 }

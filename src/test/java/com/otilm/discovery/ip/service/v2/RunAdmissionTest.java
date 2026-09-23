@@ -204,7 +204,8 @@ class RunAdmissionTest {
         UUID stopped = UUID.randomUUID();
         service.status(runRequest(stopped, stoppedCheckpoint().encode()));
 
-        Assertions.assertThrows(NodeAtCapacityException.class, () -> service.resume(runRequest(stopped, null)));
+        var resume = runRequest(stopped, null);
+        Assertions.assertThrows(NodeAtCapacityException.class, () -> service.resume(resume));
         Assertions
                 .assertEquals(DiscoveryRunState.STOPPED, registry.state(stopped).orElseThrow(),
                         "the run stays resumable for when the node has room");
