@@ -211,7 +211,8 @@ class ResultBufferTest {
 
         Assertions.assertTrue(started.await(5, TimeUnit.SECONDS));
         Assertions
-                .assertTrue(waitFor(budget::isBackpressured), "the third insert should be parked on the item bound");
+                .assertTrue(waitFor(() -> budget.isBackpressured(runId)),
+                        "the third insert should be parked on the item bound");
         Assertions.assertNull(third.get(), "it must block, not drop the item and carry on");
         Assertions.assertEquals(2, buffer.held());
 
@@ -219,7 +220,35 @@ class ResultBufferTest {
         producer.join(Duration.ofSeconds(5));
 
         Assertions.assertEquals(3L, third.get(), "the drain should have released the parked producer");
-        Assertions.assertFalse(budget.isBackpressured());
+        Assertions.assertFalse(budget.isBackpressured(runId));
+    }
+
+    /**
+     * Status names the phase for the run it answers about. A producer parked on its own run's cap says nothing about
+     * any other run, which is still free to insert.
+     */
+    @Test
+    void reportsBackpressureOnlyForTheRunThatIsParked() throws Exception {
+        UUID parked = UUID.randomUUID();
+        UUID healthy = UUID.randomUUID();
+        BufferBudget budget = budget(8, 1, 1L << 30, 1L << 31, 30_000);
+        ResultBuffer full = buffer(budget, parked, 0);
+        buffer(budget, healthy, 0);
+        full.add(item("a"), ITEM_BYTES);
+
+        Thread producer = Thread.ofVirtual().start(() -> {
+            try {
+                full.add(item("b"), ITEM_BYTES);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        Assertions.assertTrue(waitFor(() -> budget.isBackpressured(parked)));
+        Assertions.assertFalse(budget.isBackpressured(healthy), "the other run is not waiting on anything");
+
+        full.discardThrough(1);
+        producer.join(Duration.ofSeconds(5));
     }
 
     /** The bound that cannot be waited out has to fail the run naming itself, not truncate its results. */

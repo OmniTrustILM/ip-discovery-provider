@@ -18,16 +18,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
 import java.util.function.UnaryOperator;
+import java.util.stream.IntStream;
 
 /**
- * The runs this node is scanning, keyed by the {@code runId} Core assigns.
+ * The runs this node is tracking, keyed by the {@code runId} Core assigns: runs it is scanning, runs stopped here or
+ * rebuilt stopped from a replayed checkpoint, and finished runs until the reaper finds them idle.
  *
  * <p>
  * Node-local and deliberately so: a running run's buffer cannot be shared, which is what makes running runs
- * single-replica. A stopped run holds nothing here — it is rebuilt from its replayed handle on whichever replica the
- * call reaches — so a miss is not automatically an error, and callers decide what a miss means.
+ * single-replica. A stopped run needs nothing only this node has — it can be rebuilt from its replayed checkpoint on
+ * whichever replica the call reaches — so a miss is not automatically an error, and callers decide what a miss means.
  */
 @Component
 public class RunRegistry {
@@ -39,6 +42,18 @@ public class RunRegistry {
 
     /** Outside the sequence space, which starts at zero and only grows, so zero stays a high water like any other. */
     private static final long NOTHING_OWED = -1L;
+
+    /**
+     * Striped rather than one per run: the lock has to exist before the run does, because initiate and a rebuilding
+     * resume take it first, and a per-run lock removed with its run can be handed out twice. Runs sharing a stripe
+     * only take turns.
+     *
+     * <p>
+     * A {@link ReentrantLock} rather than a monitor because stop holds it while its scan settles, for up to ten
+     * seconds, and on JDK 21 a virtual thread blocked on or inside a monitor pins its carrier.
+     */
+    private final ReentrantLock[] lifecycle =
+            IntStream.range(0, 1024).mapToObj(i -> new ReentrantLock()).toArray(ReentrantLock[]::new);
 
     @org.springframework.beans.factory.annotation.Autowired
     public RunRegistry() {
@@ -75,10 +90,39 @@ public class RunRegistry {
     }
 
     /**
+     * Serialises initiate, stop and resume for one run. Each of them changes the run in several steps, and the only
+     * other guard is a compare-and-set on the state alone, so without it a stop can land inside a resume and a
+     * duplicate resume can answer before the first has finished. Drains, status, cancel and the scan never take it.
+     */
+    public ReentrantLock lifecycleLock(UUID runId) {
+        return lifecycle[Math.floorMod(runId.hashCode(), lifecycle.length)];
+    }
+
+    /**
      * @return false if the run is already registered, which is a repeated initiate rather than a new run
      */
     public boolean register(UUID runId, RunHandle handle) {
         return runs.putIfAbsent(runId, new Entry(handle, ticker.getAsLong())) == null;
+    }
+
+    /**
+     * Publishes a rebuilt run complete, in one step.
+     *
+     * <p>
+     * Registered empty and filled afterwards, it is briefly visible as a running run owing no cursor check — the
+     * check that stops a rebuilt run serving across a hole. A concurrent resume can also create a buffer in that
+     * gap, which the filling call would overwrite.
+     *
+     * @return false if the run is already registered, which the caller answers from the entry that is already there
+     */
+    public boolean registerRebuilt(UUID runId, RunHandle handle, DiscoveryRunState state, ResultBuffer buffer,
+            long drainVerificationOwedAt, long targetsTotal) {
+        Entry entry = new Entry(handle, ticker.getAsLong());
+        entry.state.set(state);
+        entry.buffer.set(buffer);
+        entry.drainVerificationOwedAt.set(drainVerificationOwedAt);
+        entry.targetsTotal.set(targetsTotal);
+        return runs.putIfAbsent(runId, entry) == null;
     }
 
     /**
@@ -94,6 +138,8 @@ public class RunRegistry {
             entry.runner.set(runner);
             entry.buffer.set(buffer);
             if (runner != null) {
+                // The previous attempt's future is finished and would satisfy a wait that belongs to this one.
+                entry.scan.set(null);
                 entry.scanExpected.set(true);
             }
             return entry;

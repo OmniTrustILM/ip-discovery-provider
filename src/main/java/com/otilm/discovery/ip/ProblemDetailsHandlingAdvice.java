@@ -6,6 +6,10 @@ import com.otilm.api.model.common.error.ErrorCode;
 import com.otilm.api.model.common.error.ProblemDetailExtended;
 import com.otilm.discovery.ip.api.v2.AttributeCallbackNotSupportedException;
 import com.otilm.discovery.ip.api.v2.AttributeDefinitionNotFoundException;
+import com.otilm.discovery.ip.api.v2.CheckpointLostException;
+import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.UnknownRunException;
+import com.otilm.discovery.ip.service.v2.BufferBudget;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -138,6 +142,53 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     public ProblemDetail handleAttributeCallbackNotSupported(AttributeCallbackNotSupportedException ex) {
         LOG.error("Attribute callback not supported: {}", ex.getMessage(), ex);
         return ProblemDetailExtended.fromErrorCode(ErrorCode.VALIDATION_FAILED, ex.getMessage(), null, null);
+    }
+
+    /**
+     * Core reads a 404 carrying this code as definitive: the run cannot be recovered by retrying, and it ends FAILED.
+     * That is the honest answer for a run this node never had, or one whose buffer a restart took with it.
+     */
+    @ExceptionHandler(UnknownRunException.class)
+    public ProblemDetail handleUnknownRun(UnknownRunException ex) {
+        LOG.info("Run not tracked: {}", ex.getMessage());
+        return ProblemDetailExtended.fromErrorCode(ErrorCode.OPERATION_NOT_TRACKED, ex.getMessage(), null, null);
+    }
+
+    /**
+     * 410 rather than 404: the run is recognised, and it is the checkpoint that cannot be continued. Core reads the
+     * two differently, and collapsing them would turn an upgrade that reordered the enumeration into a run that never
+     * existed.
+     */
+    @ExceptionHandler(CheckpointLostException.class)
+    public ProblemDetail handleCheckpointLost(CheckpointLostException ex) {
+        LOG.warn("Checkpoint refused: {}", ex.getMessage());
+        return ProblemDetailExtended.fromErrorCode(ErrorCode.CHECKPOINT_LOST, ex.getMessage(), null, null);
+    }
+
+    /**
+     * A node at its run cap, answered as retryable.
+     *
+     * <p>
+     * <b>Current Core behaviour:</b> Core does not retry. It ends the run on any initiate failure and renders this
+     * code as the connector being unreachable, so an operator whose node is merely full is told it is down.
+     *
+     * <p>
+     * <b>Contract gap:</b> saying so honestly needs a capacity code in the contract.
+     */
+    @ExceptionHandler(NodeAtCapacityException.class)
+    public ProblemDetail handleNodeAtCapacity(NodeAtCapacityException ex) {
+        LOG.warn("Refusing a run: {}", ex.getMessage());
+        return ProblemDetailExtended.fromErrorCode(ErrorCode.SERVICE_UNAVAILABLE, ex.getMessage(), null, null);
+    }
+
+    /**
+     * The run cannot continue and says which bound stopped it. Reported rather than truncated: a short answer would
+     * look like a completed scan that found less.
+     */
+    @ExceptionHandler(BufferBudget.BufferLimitExceededException.class)
+    public ProblemDetail handleBufferLimit(BufferBudget.BufferLimitExceededException ex) {
+        LOG.error("Buffer limit reached: {}", ex.getMessage());
+        return ProblemDetailExtended.fromErrorCode(ErrorCode.SERVICE_UNAVAILABLE, ex.getMessage(), null, null);
     }
 
     @ExceptionHandler(NotFoundException.class)
