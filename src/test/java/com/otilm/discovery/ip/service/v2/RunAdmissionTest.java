@@ -163,7 +163,8 @@ class RunAdmissionTest {
     private static ConnectionService parkedProbes() {
         return url -> {
             try {
-                Thread.sleep(Duration.ofSeconds(30));
+                // Nothing counts this down: the probe is parked until the stop interrupts it.
+                new CountDownLatch(1).await(30, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

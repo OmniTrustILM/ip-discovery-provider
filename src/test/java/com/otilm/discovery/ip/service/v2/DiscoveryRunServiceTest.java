@@ -365,7 +365,8 @@ class DiscoveryRunServiceTest {
         DiscoveryRunService stalled = new DiscoveryRunService(registry, budget, attributeService(), url -> {
             probing.countDown();
             try {
-                Thread.sleep(Duration.ofSeconds(30));
+                // Nothing counts this down: the probe is parked until the shutdown interrupts it.
+                new java.util.concurrent.CountDownLatch(1).await(30, java.util.concurrent.TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
