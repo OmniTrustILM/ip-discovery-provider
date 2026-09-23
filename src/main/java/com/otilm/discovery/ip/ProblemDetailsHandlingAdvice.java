@@ -165,7 +165,11 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
         return ProblemDetailExtended.fromErrorCode(ErrorCode.CHECKPOINT_LOST, ex.getMessage(), null, null);
     }
 
-    /** Retryable on purpose: another node may have room, and this one will once a run finishes. */
+    /**
+     * Another node may have room, and this one will once a run finishes — but Core does not act on that today: it
+     * ends the run on any initiate failure and renders this code as the connector being unreachable, so an operator
+     * whose node is merely full is told it is down. Saying so honestly needs a capacity code in the contract.
+     */
     @ExceptionHandler(NodeAtCapacityException.class)
     public ProblemDetail handleNodeAtCapacity(NodeAtCapacityException ex) {
         LOG.warn("Refusing a run: {}", ex.getMessage());

@@ -3,7 +3,12 @@ package com.otilm.discovery.ip;
 import com.otilm.api.exception.NotFoundException;
 import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.common.error.ErrorCode;
+import com.otilm.api.model.common.error.ProblemDetailExtended;
 import com.otilm.api.model.core.auth.Resource;
+import com.otilm.discovery.ip.api.v2.CheckpointLostException;
+import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.UnknownRunException;
+import com.otilm.discovery.ip.service.v2.BufferBudget;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotationUtils;
@@ -12,6 +17,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.core.MethodParameter;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.util.UUID;
 
 class ProblemDetailsHandlingAdviceTest {
 
@@ -124,5 +131,51 @@ class ProblemDetailsHandlingAdviceTest {
         Assertions
                 .assertEquals(ErrorCode.INTERNAL_SERVER_ERROR.getStatus().value(), problem.getStatus(),
                         "the error code is what a caller can act on, and it must survive the message being withheld");
+    }
+
+    /**
+     * Core reads the status and the code together, and acts on each of these differently: 404 ends the run, 410 says
+     * the checkpoint is the part that cannot continue, 503 is a refusal the run survives. Answering the wrong pair
+     * turns a full node into a run that never existed.
+     */
+    @Test
+    void answers404AndOperationNotTrackedForARunThisNodeDoesNotHave() {
+        ProblemDetail problem = advice.handleUnknownRun(new UnknownRunException(UUID.randomUUID()));
+
+        Assertions.assertEquals(HttpStatus.NOT_FOUND.value(), problem.getStatus());
+        Assertions.assertEquals(ErrorCode.OPERATION_NOT_TRACKED, errorCodeOf(problem));
+    }
+
+    @Test
+    void answers410AndCheckpointLostForACheckpointThatCannotBeContinued() {
+        ProblemDetail problem = advice
+                .handleCheckpointLost(new CheckpointLostException(UUID.randomUUID(), "the enumeration was reordered"));
+
+        Assertions.assertEquals(HttpStatus.GONE.value(), problem.getStatus());
+        Assertions.assertEquals(ErrorCode.CHECKPOINT_LOST, errorCodeOf(problem));
+    }
+
+    @Test
+    void answers503AndServiceUnavailableForANodeAtItsRunCap() {
+        ProblemDetail problem = advice.handleNodeAtCapacity(new NodeAtCapacityException("8 runs already"));
+
+        Assertions.assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), problem.getStatus());
+        Assertions.assertEquals(ErrorCode.SERVICE_UNAVAILABLE, errorCodeOf(problem));
+    }
+
+    /** The bound that stopped the run is the message, so it reaches the wire rather than only the log. */
+    @Test
+    void answers503AndServiceUnavailableWhenARunOutgrowsItsBuffer() {
+        ProblemDetail problem = advice
+                .handleBufferLimit(
+                        new BufferBudget.BufferLimitExceededException("run holds 100000 items, the per-run cap"));
+
+        Assertions.assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), problem.getStatus());
+        Assertions.assertEquals(ErrorCode.SERVICE_UNAVAILABLE, errorCodeOf(problem));
+        Assertions.assertTrue(problem.getDetail().contains("per-run cap"), problem.getDetail());
+    }
+
+    private static ErrorCode errorCodeOf(ProblemDetail problem) {
+        return ((ProblemDetailExtended) problem).getErrorCode();
     }
 }
