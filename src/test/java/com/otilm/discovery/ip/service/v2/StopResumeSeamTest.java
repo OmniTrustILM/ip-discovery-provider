@@ -47,7 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 class StopResumeSeamTest {
 
-    /** More than one chunk, so a stop can land inside one. */
+    /** Well inside one chunk, so a stop lands mid-chunk with items numbered and no boundary crossed. */
     private static final String HOSTS = "10.0.0.1-10.0.0.12";
 
     private static X509Certificate certificate;
@@ -177,7 +177,9 @@ class StopResumeSeamTest {
                 .assertEquals(0L, registry.find(runId).orElseThrow().sequenceHighWater(),
                         "no chunk boundary has been crossed, so the handle still reads zero");
 
-        probes.release.countDown();
+        // Stopped while the probe is still held: the stop interrupts it, which is what releases the await. Letting
+        // it go first lets the scan finish every target before the stop lands, and the assertion below then passes
+        // without ever exercising the mid-chunk path this test exists for.
         var stopped = service.stop(runRequest(runId, null));
 
         RunHandle handle = RunHandle.from(stopped.getCheckpoint()).orElseThrow();
@@ -186,6 +188,9 @@ class StopResumeSeamTest {
                         "the checkpoint said " + handle.sequenceHighWater() + " but " + numbered
                                 + " items had already been numbered; a later drain reads that gap as loss and kills a "
                                 + "run that lost nothing");
+        Assertions
+                .assertEquals(0L, handle.cursorIndex(),
+                        "the interrupted chunk never committed, so the cursor stays at the boundary it started from");
     }
 
     /**

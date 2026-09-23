@@ -123,7 +123,7 @@ class RunAdmissionTest {
         }
     }
 
-    // --- M2: one resume wins ---
+    // --- one resume wins ---
 
     /**
      * Two resumes can both read STOPPED. Both starting a scan puts two sequencers on one run issuing the same
@@ -173,7 +173,7 @@ class RunAdmissionTest {
                         "a corrected retry has to be able to resume it");
     }
 
-    // --- M5: a stopped run is not competing for scanning capacity ---
+    // --- a stopped run is not competing for scanning capacity ---
 
     /**
      * Core drives a stopped run for its whole resume window. Refusing those ticks because the node is busy scanning
@@ -210,7 +210,7 @@ class RunAdmissionTest {
                         "the run stays resumable for when the node has room");
     }
 
-    // --- M1: the two refusals mean different things ---
+    // --- the two refusals mean different things ---
 
     @Test
     void tellsARepeatFromAFullNode() {
