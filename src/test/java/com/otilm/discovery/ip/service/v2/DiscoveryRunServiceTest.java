@@ -358,6 +358,28 @@ class DiscoveryRunServiceTest {
         Assertions.assertEquals(0, budget.openRuns(), "a cancelled run leaves nothing charged");
     }
 
+    /** Scans run on the service's own executor, so they end with the context rather than outliving it. */
+    @Test
+    void interruptsItsScansWhenItShutsDown() throws Exception {
+        java.util.concurrent.CountDownLatch probing = new java.util.concurrent.CountDownLatch(1);
+        DiscoveryRunService stalled = new DiscoveryRunService(registry, budget, attributeService(), url -> {
+            probing.countDown();
+            try {
+                Thread.sleep(Duration.ofSeconds(30));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            throw new IOException("interrupted");
+        });
+        UUID runId = UUID.randomUUID();
+        stalled.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
+        Assertions.assertTrue(probing.await(10, java.util.concurrent.TimeUnit.SECONDS));
+
+        stalled.shutdown();
+
+        Assertions.assertTrue(registry.awaitScan(runId, Duration.ofSeconds(5)), "the scan must end with the service");
+    }
+
     @Test
     void everyLifecycleCallOnAnUnknownRunSaysItIsNotTracked() {
         DiscoveryRunRequestDto unknown = runRequest(UUID.randomUUID());

@@ -7,7 +7,10 @@ import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
 import com.otilm.api.model.common.attribute.v3.content.BaseAttributeContentV3;
 import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryDrainRequestDto;
+import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryInitiateRequestDto;
+import com.otilm.api.model.connector.discovery.v2.DiscoveryInitiateResponseDto;
+import com.otilm.api.model.connector.discovery.v2.DiscoveryStopResponseDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
 import com.otilm.api.model.core.auth.Resource;
@@ -31,12 +34,17 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 /**
- * Who gets admitted to this node, and what a refusal means. Both refusals used to be the same boolean, and the two
- * mean opposite things: a repeat must be answered idempotently, a full node must not be.
+ * Who gets admitted to this node, and what a refusal means. The two refusals mean opposite things: a repeat must be
+ * answered idempotently, a full node must not be.
  */
 class RunAdmissionTest {
 
@@ -113,6 +121,56 @@ class RunAdmissionTest {
         return request;
     }
 
+    /**
+     * Holds the first resume inside its validation: after it has claimed the run, before its scan starts. Whatever
+     * reaches the run in that window is what the lifecycle lock exists for.
+     */
+    private static final class HoldsFirstResume extends DiscoveryAttributeServiceImpl {
+        private final CountDownLatch entered = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+        private final AtomicBoolean held = new AtomicBoolean();
+        private final boolean refuseIt;
+
+        HoldsFirstResume(boolean refuseIt) {
+            super(buildProperties());
+            this.refuseIt = refuseIt;
+        }
+
+        @Override
+        public int readParallelExecutions(List<RequestAttribute> attributes) {
+            if (held.compareAndSet(false, true)) {
+                entered.countDown();
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                if (refuseIt) {
+                    throw new ValidationException("the first resume is refused");
+                }
+            }
+            return super.readParallelExecutions(attributes);
+        }
+    }
+
+    private static BuildProperties buildProperties() {
+        Properties properties = new Properties();
+        properties.setProperty("version", "2.20.0-SNAPSHOT");
+        return new BuildProperties(properties);
+    }
+
+    /** Parks every probe until a stop interrupts it, so a resumed scan is still running when the stop lands. */
+    private static ConnectionService parkedProbes() {
+        return url -> {
+            try {
+                Thread.sleep(Duration.ofSeconds(30));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            throw new IOException("interrupted");
+        };
+    }
+
     private DiscoveryRunService serviceWith(BufferBudget budget) {
         return new DiscoveryRunService(registry, budget, attributeService(), probes);
     }
@@ -142,7 +200,9 @@ class RunAdmissionTest {
                     .range(0, 8)
                     .<Callable<Object>>mapToObj(i -> () -> service.resume(runRequest(runId, null)))
                     .toList();
-            executor.invokeAll(resumes);
+            for (var result : executor.invokeAll(resumes)) {
+                Assertions.assertDoesNotThrow(() -> result.get(), "a losing resume is a no-op, not a failure");
+            }
         }
 
         Awaitility
@@ -155,6 +215,98 @@ class RunAdmissionTest {
                 .assertEquals(4, probes.probed.get(),
                         "a second scan would re-probe the remaining targets and renumber what the first produced");
         Assertions.assertEquals(8L, registry.find(runId).orElseThrow().cursorIndex());
+    }
+
+    /**
+     * Two resumes can both pass Core's STOPPED check, and Core stores whichever answer it commits first as the run's
+     * checkpoint. Answered before the first resume finishes, the duplicate hands back the STOPPED checkpoint it read
+     * on arrival while the run is in fact scanning.
+     */
+    @Test
+    void aDuplicateResumeAnswersWithWhatTheFirstLeft() throws Exception {
+        UUID runId = UUID.randomUUID();
+        HoldsFirstResume attributes = new HoldsFirstResume(false);
+        DiscoveryRunService service = new DiscoveryRunService(registry,
+                new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000), attributes, probes);
+        service.status(runRequest(runId, stoppedCheckpoint().encode()));
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<DiscoveryInitiateResponseDto> first = executor.submit(() -> service.resume(runRequest(runId, null)));
+            Assertions.assertTrue(attributes.entered.await(10, TimeUnit.SECONDS));
+            Future<DiscoveryInitiateResponseDto> duplicate =
+                    executor.submit(() -> service.resume(runRequest(runId, null)));
+
+            Assertions
+                    .assertThrows(TimeoutException.class, () -> duplicate.get(300, TimeUnit.MILLISECONDS),
+                            "the duplicate must wait for the first resume rather than answer ahead of it");
+            attributes.release.countDown();
+
+            first.get(10, TimeUnit.SECONDS);
+            RunHandle answered = RunHandle.from(duplicate.get(10, TimeUnit.SECONDS).getCheckpoint()).orElseThrow();
+            Assertions.assertEquals(RunHandle.RunState.RUNNING, answered.state());
+        }
+    }
+
+    /**
+     * A duplicate that answered success while the first resume went on to fail would leave Core recording a running
+     * run that nothing is scanning. Waiting instead, it finds the run put back to STOPPED and resumes it itself.
+     */
+    @Test
+    void aDuplicateResumeTakesOverWhenTheFirstIsRefused() throws Exception {
+        UUID runId = UUID.randomUUID();
+        HoldsFirstResume attributes = new HoldsFirstResume(true);
+        DiscoveryRunService service = new DiscoveryRunService(registry,
+                new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000), attributes, probes);
+        service.status(runRequest(runId, stoppedCheckpoint().encode()));
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<DiscoveryInitiateResponseDto> first = executor.submit(() -> service.resume(runRequest(runId, null)));
+            Assertions.assertTrue(attributes.entered.await(10, TimeUnit.SECONDS));
+            Future<DiscoveryInitiateResponseDto> duplicate =
+                    executor.submit(() -> service.resume(runRequest(runId, null)));
+            Assertions.assertThrows(TimeoutException.class, () -> duplicate.get(300, TimeUnit.MILLISECONDS));
+            attributes.release.countDown();
+
+            Assertions.assertThrows(java.util.concurrent.ExecutionException.class, () -> first.get(10, TimeUnit.SECONDS));
+            duplicate.get(10, TimeUnit.SECONDS);
+        }
+
+        Awaitility.await().atMost(Duration.ofSeconds(10)).until(() -> probes.probed.get() == 4);
+        Assertions.assertEquals(8L, registry.find(runId).orElseThrow().cursorIndex(), "the duplicate's scan finished");
+    }
+
+    /**
+     * A stop landing while a resume is still validating would checkpoint a run that nothing is scanning yet, and the
+     * resume would then start a scan under a run the stop has just reported stopped. Waiting, the stop finds the scan
+     * the resume started and stops that.
+     */
+    @Test
+    void aStopArrivingMidResumeStopsTheScanThatResumeStarts() throws Exception {
+        UUID runId = UUID.randomUUID();
+        HoldsFirstResume attributes = new HoldsFirstResume(false);
+        DiscoveryRunService service = new DiscoveryRunService(registry,
+                new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000), attributes, parkedProbes());
+        service.status(runRequest(runId, stoppedCheckpoint().encode()));
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<DiscoveryInitiateResponseDto> resume = executor.submit(() -> service.resume(runRequest(runId, null)));
+            Assertions.assertTrue(attributes.entered.await(10, TimeUnit.SECONDS));
+            Future<DiscoveryStopResponseDto> stop = executor.submit(() -> service.stop(runRequest(runId, null)));
+
+            Assertions
+                    .assertThrows(TimeoutException.class, () -> stop.get(300, TimeUnit.MILLISECONDS),
+                            "the stop must wait for the resume to finish rather than land inside it");
+            attributes.release.countDown();
+
+            resume.get(10, TimeUnit.SECONDS);
+            RunHandle stopped = RunHandle.from(stop.get(20, TimeUnit.SECONDS).getCheckpoint()).orElseThrow();
+            Assertions.assertEquals(RunHandle.RunState.STOPPED, stopped.state());
+        }
+
+        Assertions.assertEquals(DiscoveryRunState.STOPPED, registry.state(runId).orElseThrow());
+        Assertions
+                .assertTrue(registry.runner(runId).orElseThrow().isStopping(),
+                        "the scan the resume started is the one the stop must reach");
     }
 
     /** A resume that fails validation must leave the run resumable, not marked running with nothing scanning it. */
@@ -226,8 +378,26 @@ class RunAdmissionTest {
     }
 
     /**
-     * The contract requires a repeated initiate to be answered idempotently. Conflating the two refusals answered a
-     * concurrent duplicate with a 503 claiming the node was full, which is both wrong and misleading.
+     * A slot left open with no run behind it is reclaimed rather than answered from. Answering from it would report a
+     * run that nothing is scanning, and Core's first drain of it would be a 404.
+     */
+    @Test
+    void reclaimsASlotThatOutlivedItsRun() {
+        BufferBudget budget = new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000);
+        DiscoveryRunService service = serviceWith(budget);
+        UUID runId = UUID.randomUUID();
+        budget.admit(runId);
+
+        service.initiate(initiateRequest(runId, HOSTS));
+
+        Assertions.assertTrue(registry.find(runId).isPresent(), "the run must actually be started");
+        Assertions.assertEquals(1, budget.openRuns(), "the stale slot is reused, not doubled");
+        Awaitility.await().atMost(Duration.ofSeconds(10)).until(() -> probes.probed.get() == 8);
+    }
+
+    /**
+     * The contract requires a repeated initiate to be answered idempotently. A concurrent duplicate is a repeat, and
+     * answering it with a 503 would claim a full node that is not.
      */
     @Test
     void answersEveryOneOfSeveralConcurrentInitiatesIdempotently() throws Exception {

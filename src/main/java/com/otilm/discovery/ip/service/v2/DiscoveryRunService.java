@@ -18,6 +18,7 @@ import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -26,20 +27,26 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 import java.time.Duration;
 
 /**
  * The run lifecycle: initiate, status, results, stop, resume, cancel.
  *
  * <p>
- * Every call replays the run's whole configuration, so nothing here is read from storage. What the node keeps is the
- * live run — its buffer and its scan — and only for as long as it is scanning or has items nobody has taken.
+ * Every call replays the run's whole configuration, so nothing here is read from storage. What the node keeps is in
+ * memory: a scanning run's buffer and scan, a run stopped here with what it has not handed over, a run rebuilt stopped
+ * from its replayed checkpoint with an empty buffer, and a finished run until the reaper finds it idle.
+ *
+ * <p>
+ * A run charges a scanning slot from initiate or resume until it is cancelled or reaped, or, once finished, until Core
+ * has acknowledged everything it produced. A rebuilt run charges none until it is resumed.
  */
 @Service
 public class DiscoveryRunService {
@@ -64,6 +71,15 @@ public class DiscoveryRunService {
     }
 
     /**
+     * Interrupts every scan when the context closes. Each scan's own probe executor then interrupts its probes as it
+     * closes, so nothing keeps probing after the service is gone.
+     */
+    @PreDestroy
+    public void shutdown() {
+        scans.shutdownNow();
+    }
+
+    /**
      * Starts a run, or recognises one already started.
      *
      * <p>
@@ -72,6 +88,12 @@ public class DiscoveryRunService {
      * without reporting anything wrong.
      */
     public DiscoveryInitiateResponseDto initiate(DiscoveryInitiateRequestDto request) {
+        // Under the lock from the lookup on, so a concurrent duplicate waits for the first to register and start the
+        // run and then answers from it, rather than seeing it half built.
+        return underLifecycleLock(request.getRunId(), () -> initiateUnderLock(request));
+    }
+
+    private DiscoveryInitiateResponseDto initiateUnderLock(DiscoveryInitiateRequestDto request) {
         UUID runId = request.getRunId();
         var known = registry.find(runId);
         if (known.isPresent()) {
@@ -85,25 +107,21 @@ public class DiscoveryRunService {
         int parallelism = attributes.readParallelExecutions(request.getAttributes());
 
         RunHandle handle = RunHandle.initial(targets.digest());
-        switch (budget.admit(runId)) {
-            case AT_CAPACITY ->
-                throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
-            case ALREADY_HELD -> {
-                // A concurrent initiate for the same run got here first. The contract wants the repeat answered
-                // idempotently, so it is answered with the checkpoint the winner started from rather than with a
-                // claim that the node is full -- but only once the winner is visible. Answering from our own handle
-                // while the registry is still empty hands back a RUNNING checkpoint that cannot be rebuilt, so the
-                // caller's next status or drain is a terminal 404 on an initiate that just succeeded.
-                logger.info("Run {} is already being started; answering the concurrent initiate idempotently", runId);
-                return accepted(awaitRegistration(runId).orElse(handle));
-            }
-            case ADMITTED -> {
-                boolean registered = registry.register(runId, handle);
-                if (!registered) {
-                    budget.close(runId);
-                    return accepted(registry.find(runId).orElse(handle));
-                }
-            }
+        BufferBudget.Admission admission = budget.admit(runId);
+        if (admission == BufferBudget.Admission.ALREADY_HELD) {
+            // Every path that opens this run's holding runs under this lock, and a duplicate initiate finds the run
+            // above, so a holding here has no run behind it: something released the run without closing it. Reclaimed
+            // rather than answered from, which would report a run that nothing is scanning.
+            logger.warn("Run {} held a scanning slot with no run behind it; reclaiming it", runId);
+            budget.close(runId);
+            admission = budget.admit(runId);
+        }
+        if (admission == BufferBudget.Admission.AT_CAPACITY) {
+            throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
+        }
+        if (!registry.register(runId, handle)) {
+            budget.close(runId);
+            return accepted(registry.find(runId).orElse(handle));
         }
 
         logger
@@ -201,34 +219,18 @@ public class DiscoveryRunService {
     }
 
     /**
-     * The winner's handle, once it has registered. Bounded: a winner that never registers failed, and the repeat is
-     * then answered from its own handle rather than held indefinitely.
-     */
-    private Optional<RunHandle> awaitRegistration(UUID runId) {
-        long deadline = System.nanoTime() + REGISTRATION_WAIT_NANOS;
-        Optional<RunHandle> found = registry.find(runId);
-        while (found.isEmpty() && System.nanoTime() < deadline) {
-            Thread.onSpinWait();
-            found = registry.find(runId);
-        }
-        if (found.isEmpty()) {
-            logger.warn("Run {} was admitted by another initiate that has not registered it; answering from the "
-                    + "request's own checkpoint", runId);
-        }
-        return found;
-    }
-
-    /**
      * Stops the scan and answers with the checkpoint. The scan is interrupted rather than quiesced, so this returns
      * inside the control envelope even when every probe is stalled or parked on backpressure.
      */
     public DiscoveryStopResponseDto stop(DiscoveryRunRequestDto request) {
+        return underLifecycleLock(request.getRunId(), () -> stopUnderLock(request));
+    }
+
+    private DiscoveryStopResponseDto stopUnderLock(DiscoveryRunRequestDto request) {
         UUID runId = request.getRunId();
         registry.find(runId).orElseThrow(() -> new UnknownRunException(runId));
         registry.touch(runId);
 
-        // Marked stopped before the scan is asked to stop, so a chunk finishing in between cannot move the
-        // checkpoint after this call has answered with one.
         DiscoveryRunState current = registry.state(runId).orElse(null);
         if (current != null && TERMINAL.contains(current)) {
             // Core allows a stop while its own status is IN_PROGRESS, which it keeps through the tail drain after
@@ -243,6 +245,8 @@ public class DiscoveryRunService {
                             .encode());
             return ended;
         }
+        // Marked stopped before the scan is asked to stop, so a chunk finishing in between cannot move the
+        // checkpoint after this call has answered with one.
         registry.update(runId, handle -> handle.withState(RunHandle.RunState.STOPPED));
         registry.setState(runId, DiscoveryRunState.STOPPED);
         registry.runner(runId).ifPresent(ScanRunner::stop);
@@ -275,6 +279,12 @@ public class DiscoveryRunService {
      * Resumes a stopped run, rebuilding it from the replayed checkpoint when this node no longer holds it.
      */
     public DiscoveryInitiateResponseDto resume(DiscoveryRunRequestDto request) {
+        // Under the lock, the handle a duplicate answers with is read after the first resume has finished: the running
+        // checkpoint when it started, or a STOPPED run this call then resumes itself when it was refused.
+        return underLifecycleLock(request.getRunId(), () -> resumeUnderLock(request));
+    }
+
+    private DiscoveryInitiateResponseDto resumeUnderLock(DiscoveryRunRequestDto request) {
         UUID runId = request.getRunId();
         // Accepted optimistically: resume carries no cursor, so the verdict on whether anything was lost comes from
         // the first drain, which arrives within seconds because Core expedites the drain row on a successful resume.
@@ -319,6 +329,16 @@ public class DiscoveryRunService {
                 budget.close(runId);
             }
             throw e;
+        }
+    }
+
+    private <T> T underLifecycleLock(UUID runId, Supplier<T> call) {
+        ReentrantLock lock = registry.lifecycleLock(runId);
+        lock.lock();
+        try {
+            return call.get();
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -436,9 +456,6 @@ public class DiscoveryRunService {
     private static final Set<DiscoveryRunState> TERMINAL =
             EnumSet.of(DiscoveryRunState.COMPLETED, DiscoveryRunState.FAILED, DiscoveryRunState.CANCELLED);
 
-    /** How long a repeated initiate waits for the winner to become visible before answering from its own handle. */
-    private static final long REGISTRATION_WAIT_NANOS = Duration.ofSeconds(1).toNanos();
-
     /**
      * The checkpoint indexes into an enumeration, so it can only be continued against the same one. Any change to
      * enumeration order invalidates the cursor, and the run is refused loudly rather than resumed at the wrong
@@ -493,7 +510,7 @@ public class DiscoveryRunService {
         // that reached every target and found nothing listening is complete, not degraded.
         progress.setTargetsFailed(failed);
         // Named only when it explains a run that looks stalled; a phase on a healthy run is noise Core would keep.
-        progress.setPhase(budget.isBackpressured() ? "backpressured" : null);
+        progress.setPhase(budget.isBackpressured(runId) ? "backpressured" : null);
 
         if (!discovered.isEmpty()) {
             Map<Resource, DiscoveryResourceProgressDto> byResource = new LinkedHashMap<>();
@@ -545,7 +562,7 @@ public class DiscoveryRunService {
      * The targets come from the request every time rather than from the checkpoint. The checkpoint carries a digest
      * of them instead, so a resumed run can prove the enumeration it is about to continue is the one it left.
      */
-    private TargetEnumeration enumerate(com.otilm.api.model.connector.discovery.v2.DiscoveryV2ScopedRequestDto request) {
+    private TargetEnumeration enumerate(DiscoveryV2ScopedRequestDto request) {
         List<String> hosts = attributes.readHosts(request.getAttributes());
         List<String> ports = attributes.readPorts(request.getAttributes());
         return TargetEnumeration.of(String.join(",", hosts), String.join(",", ports), false);

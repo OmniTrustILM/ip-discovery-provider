@@ -41,7 +41,6 @@ public class BufferBudget {
     private final long backpressureWaitMs;
 
     private long totalBytes;
-    private int waiting;
 
     public BufferBudget(@Value("${discovery.buffer.max-runs}") int maxRuns,
             @Value("${discovery.buffer.max-items-per-run}") long maxItemsPerRun,
@@ -71,6 +70,8 @@ public class BufferBudget {
     private static final class Holding {
         private long items;
         private long bytes;
+        /** Producers of this run parked on a bound, whichever bound it is. */
+        private int waiting;
     }
 
     /** Why a run was or was not admitted. The two refusals mean different things and get different answers. */
@@ -144,7 +145,7 @@ public class BufferBudget {
             }
             long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(backpressureWaitMs);
             while (blocked(holding, bytes)) {
-                waiting++;
+                holding.waiting++;
                 try {
                     // awaitNanos reports what is left of the window; at or below zero the drain never came.
                     if (spaceFreed.awaitNanos(deadline - System.nanoTime()) <= 0) {
@@ -159,7 +160,7 @@ public class BufferBudget {
                                 + " was closed while a probe waited for buffer space");
                     }
                 } finally {
-                    waiting--;
+                    holding.waiting--;
                 }
             }
             holding.items++;
@@ -187,11 +188,15 @@ public class BufferBudget {
         }
     }
 
-    /** True while any producer is parked on a bound, which is what a run reports as its backpressured phase. */
-    public boolean isBackpressured() {
+    /**
+     * True while one of this run's producers is parked on a bound, which is what the run reports as its backpressured
+     * phase. Per run: a producer parked on its own run's cap says nothing about another run, which can still insert.
+     */
+    public boolean isBackpressured(UUID runId) {
         lock.lock();
         try {
-            return waiting > 0;
+            Holding holding = holdings.get(runId);
+            return holding != null && holding.waiting > 0;
         } finally {
             lock.unlock();
         }
