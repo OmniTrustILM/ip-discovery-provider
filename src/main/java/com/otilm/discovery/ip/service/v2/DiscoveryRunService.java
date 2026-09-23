@@ -436,7 +436,13 @@ public class DiscoveryRunService {
                 .orElseGet(() -> new ResultBuffer(runId, budget, handle.sequenceHighWater()));
         ScanRunner runner = new ScanRunner(runId, targets, buffer, registry, connectionService, parallelism,
                 EnumSet.copyOf(resources));
-        registry.attach(runId, runner, buffer);
+        if (!registry.attach(runId, runner, buffer)) {
+            // The run was cancelled or reaped while this was being built. Closing the buffer here is what returns its
+            // budget: the registry no longer holds it, so nothing else will, and the slot would be lost for good.
+            logger.info("Run {} was released before its scan started; closing what had been built for it", runId);
+            buffer.close();
+            return;
+        }
         Future<?> scan = scans.submit(() -> {
             try {
                 if (runner.scan()) {
