@@ -1,5 +1,6 @@
 package com.otilm.discovery.ip;
 
+import com.otilm.api.model.common.error.ErrorCode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,24 +40,31 @@ class ErrorModelBoundaryTest {
      * A body that will not parse is handled by the base class unless the advice overrides it, and that answer omits
      * the {@code errorCode} a caller acts on. This is the only POST on the v2 surface, so it is the path where a
      * malformed body actually arrives.
+     *
+     * <p>
+     * The code is asserted rather than merely present: {@code VALIDATION_FAILED} would tell Core a field rule
+     * failed on a body that never parsed into fields at all.
      */
     @Test
-    void answersAnUnreadableBodyInTheSameShapeAsEveryOtherV2Failure() {
+    void answersAnUnreadableBodyAsABadRequestInTheV2Envelope() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> response = rest
                 .postForEntity("/v2/attributes/callback", new HttpEntity<>("{\"attributeUuid\": ", headers),
                         String.class);
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        Assertions.assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         Assertions
                 .assertTrue(
                         response.getHeaders().getContentType()
                                 .equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
                         "expected problem+json, got " + response.getHeaders().getContentType());
         Assertions
-                .assertTrue(response.getBody().contains("\"errorCode\""),
-                        "the extended envelope carries the code a caller acts on: " + response.getBody());
+                .assertTrue(response.getBody().contains("\"" + ErrorCode.BAD_REQUEST.name() + "\""),
+                        "the envelope must name the code, not just carry one: " + response.getBody());
+        Assertions
+                .assertFalse(response.getBody().contains(ErrorCode.VALIDATION_FAILED.name()),
+                        "nothing parsed, so no field rule failed: " + response.getBody());
     }
 
     @Test
