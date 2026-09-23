@@ -168,21 +168,24 @@ public class DiscoveryRunService {
         // served, not what this reports, and Core advances its cursor by the sequences it actually received.
         response.setHighestSequence(buffer.highestSequence());
         response.setMore(page.more());
-        releaseIfFullyAcknowledged(runId, buffer, request.getAfterSequence());
+        freeSlotIfFullyAcknowledged(runId, buffer, request.getAfterSequence());
         return response;
     }
 
     /**
-     * Lets a terminal run go once Core holds everything it produced. The contract retains a terminal run for 24 hours
-     * or until it is fully acknowledged, whichever comes first, and this is the second half.
+     * Gives back a terminal run's scanning slot once Core holds everything it produced, and keeps the run.
      *
      * <p>
-     * Without it a finished run keeps its slot until the idle reaper fires half an hour after the acknowledging
-     * drain, because Core stops driving a run it has finished with. Eight of those inside that window and the next
-     * initiate is refused as a full node, which Core reports as a discovery that failed because the connector was
-     * unreachable.
+     * The run stays because the drain that acknowledges everything is not only Core's full acknowledgement. Core also
+     * sends it as an ordinary drain before it has recorded the run as completed, and keeps polling status after it;
+     * a run dropped here answers that poll with a 404, which Core reads as terminal, and a completed discovery ends
+     * FAILED. The entry goes when the reaper finds it idle.
+     *
+     * <p>
+     * The slot goes because nothing will be produced into it again. Kept until the reaper, eight finished runs inside
+     * its window refuse the next initiate as a full node.
      */
-    private void releaseIfFullyAcknowledged(UUID runId, ResultBuffer buffer, long afterSequence) {
+    private void freeSlotIfFullyAcknowledged(UUID runId, ResultBuffer buffer, long afterSequence) {
         DiscoveryRunState state = registry.state(runId).orElse(null);
         if (state == null || !TERMINAL.contains(state)) {
             return;
@@ -190,10 +193,10 @@ public class DiscoveryRunService {
         if (afterSequence < buffer.highestSequence() || buffer.held() > 0) {
             return;
         }
-        if (registry.release(runId)) {
+        if (budget.close(runId)) {
             logger
-                    .info("Run {} released: {} acknowledged everything it produced up to sequence {}", runId, state,
-                            afterSequence);
+                    .info("Run {} gave back its scanning slot: {} and acknowledged through sequence {}", runId,
+                            state, afterSequence);
         }
     }
 

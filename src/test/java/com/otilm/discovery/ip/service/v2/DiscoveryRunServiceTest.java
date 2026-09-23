@@ -117,6 +117,14 @@ class DiscoveryRunServiceTest {
         return request;
     }
 
+    private static DiscoveryDrainRequestDto drainRequest(UUID runId, long afterSequence) {
+        DiscoveryDrainRequestDto request = new DiscoveryDrainRequestDto();
+        request.setRunId(runId);
+        request.setResources(List.of(Resource.CERTIFICATE));
+        request.setAfterSequence(afterSequence);
+        return request;
+    }
+
     private void awaitCompletion(UUID runId) {
         Awaitility
                 .await()
@@ -263,6 +271,40 @@ class DiscoveryRunServiceTest {
                 .assertEquals(4L, results.getHighestSequence(),
                         "the field is run-wide and never page-scoped, whatever this page could serve");
         Assertions.assertEquals(Boolean.TRUE, results.getMore(), "sequence 4 is still here");
+    }
+
+    /**
+     * A drain at a finished run's high water is Core's full acknowledgement, but Core also sends exactly that drain as
+     * an ordinary one before it has recorded the run as completed, and then keeps polling status. Dropping the run
+     * there answers that poll with a 404 and Core ends a completed discovery FAILED. What the node needs back is the
+     * scanning slot, not the run.
+     */
+    @Test
+    void freesAFullyAcknowledgedRunsSlotWhileStillAnsweringForIt() {
+        UUID runId = UUID.randomUUID();
+        service.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
+        awaitCompletion(runId);
+
+        service.results(drainRequest(runId, 4));
+
+        Assertions.assertEquals(0, budget.openRuns(), "a finished run Core holds in full must not keep a slot");
+        Assertions.assertEquals(DiscoveryRunState.COMPLETED, service.status(runRequest(runId)).getState());
+        DiscoveryResultsResponseDto repeat = service.results(drainRequest(runId, 4));
+        Assertions.assertTrue(repeat.getItems().isEmpty());
+        Assertions.assertEquals(4L, repeat.getHighestSequence());
+    }
+
+    /** A run that has not finished is still producing, so reaching its high water frees nothing. */
+    @Test
+    void keepsTheSlotOfARunThatIsStillScanning() {
+        UUID runId = UUID.randomUUID();
+        service.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
+        awaitCompletion(runId);
+        registry.setState(runId, DiscoveryRunState.RUNNING);
+
+        service.results(drainRequest(runId, 4));
+
+        Assertions.assertEquals(1, budget.openRuns());
     }
 
     // --- stop, resume, cancel ---

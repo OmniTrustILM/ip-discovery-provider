@@ -111,7 +111,7 @@ public class BufferBudget {
         return admit(runId) == Admission.ADMITTED;
     }
 
-    public void close(UUID runId) {
+    public boolean close(UUID runId) {
         lock.lock();
         try {
             Holding holding = holdings.remove(runId);
@@ -119,6 +119,7 @@ public class BufferBudget {
                 totalBytes -= holding.bytes;
                 spaceFreed.signalAll();
             }
+            return holding != null;
         } finally {
             lock.unlock();
         }
