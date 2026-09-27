@@ -45,6 +45,7 @@
 			     interface list and validate their arguments, which is logic a test has to protect. -->
 			src/main/java/com/otilm/discovery/ip/api/*.java,
 			src/main/java/com/otilm/discovery/ip/api/v2/AttributesControllerImpl.java,
+			src/main/java/com/otilm/discovery/ip/api/v2/DiscoveryOperationControllerImpl.java,
 			<!-- JPA entities and their accessors -->
 			src/main/java/com/otilm/discovery/ip/dao/**,
 			<!-- data holder -->

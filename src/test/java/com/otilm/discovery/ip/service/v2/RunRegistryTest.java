@@ -442,4 +442,66 @@ class RunRegistryTest {
                         "a runner is attached, so its scan is still on its way");
     }
 
+
+    /** A buffer whose close parks, so a test can look at the registry while a release is inside it. */
+    private static final class ParkedClose extends ResultBuffer {
+        private final CountDownLatch closing = new CountDownLatch(1);
+        private final CountDownLatch proceed = new CountDownLatch(1);
+
+        ParkedClose(UUID runId) {
+            super(runId, new BufferBudget(1, 100, 1L << 30, 1L << 31, 30_000), 0);
+        }
+
+        @Override
+        public void close() {
+            closing.countDown();
+            try {
+                proceed.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            super.close();
+        }
+    }
+
+    /**
+     * A run must not read as gone until what it held is closed. Removed first and closed after, an initiate or a
+     * resume in between admits the same runId into the old slot, and the old close then frees the new run's slot:
+     * its first item fails as holding no budget, and the node runs over its cap meanwhile.
+     */
+    @Test
+    void keepsAReleasedRunVisibleUntilItsBufferHasClosed() throws Exception {
+        UUID runId = UUID.randomUUID();
+        registry.register(runId, handle(0));
+        ParkedClose buffer = new ParkedClose(runId);
+        registry.attach(runId, null, buffer);
+
+        Thread releaser = Thread.ofVirtual().start(() -> registry.release(runId));
+        Assertions.assertTrue(buffer.closing.await(5, TimeUnit.SECONDS));
+
+        Assertions.assertTrue(registry.find(runId).isPresent(), "still closing, so the run must not read as gone");
+        buffer.proceed.countDown();
+        releaser.join(Duration.ofSeconds(5));
+        Assertions.assertTrue(registry.find(runId).isEmpty());
+    }
+
+    /** The reaper releases the same way, so the same holds for a run it abandons. */
+    @Test
+    void keepsAnAbandonedRunVisibleUntilItsBufferHasClosed() throws Exception {
+        Ticker ticker = new Ticker();
+        RunRegistry tickedRegistry = new RunRegistry(ticker);
+        UUID runId = UUID.randomUUID();
+        tickedRegistry.register(runId, handle(0));
+        ParkedClose buffer = new ParkedClose(runId);
+        tickedRegistry.attach(runId, null, buffer);
+        ticker.advance(Duration.ofMinutes(31));
+
+        Thread reaper = Thread.ofVirtual().start(() -> tickedRegistry.abandonIdle(Duration.ofMinutes(30)));
+        Assertions.assertTrue(buffer.closing.await(5, TimeUnit.SECONDS));
+
+        Assertions.assertTrue(tickedRegistry.find(runId).isPresent(), "still closing, so the run must not read as gone");
+        buffer.proceed.countDown();
+        reaper.join(Duration.ofSeconds(5));
+        Assertions.assertTrue(tickedRegistry.find(runId).isEmpty());
+    }
 }

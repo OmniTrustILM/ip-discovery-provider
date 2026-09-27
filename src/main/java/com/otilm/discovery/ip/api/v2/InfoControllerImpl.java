@@ -43,8 +43,22 @@ public class InfoControllerImpl implements InfoController {
         response
                 .setInterfaces(List
                         .of(declare(ConnectorInterface.INFO), declare(ConnectorInterface.HEALTH),
-                                declare(ConnectorInterface.ATTRIBUTES), metrics()));
+                                declare(ConnectorInterface.ATTRIBUTES), metrics(), discovery()));
         return response;
+    }
+
+    /**
+     * Stop and resume are advertised now that a stopped run can be resumed after the connector restarts: the scan is
+     * interruptible, the checkpoint travels in the run's meta, and a run this node no longer holds is rebuilt from it.
+     *
+     * <p>
+     * Streaming stays unadvertised. Core has no stream client, so the flag would promise a path nothing uses, and the
+     * endpoint answers as unsupported.
+     */
+    private static ConnectorInterfaceInfo discovery() {
+        ConnectorInterfaceInfo info = declare(ConnectorInterface.DISCOVERY);
+        info.setFeatures(List.of(FeatureFlag.DISCOVERY_STOP_RESUME));
+        return info;
     }
 
     private static ConnectorInterfaceInfo declare(ConnectorInterface code) {
