@@ -329,14 +329,21 @@ public class RunRegistry {
     /**
      * Drops a run and hands back everything it held. Used by both the deadline and a cancel: a run that is gone must
      * leave nothing charged behind it.
+     *
+     * <p>
+     * Closed inside the map's own computation on this key, so a run reads as gone only once what it held is closed.
+     * Removed first and closed after, an initiate or a resume in between admits the same runId into the old slot,
+     * and the old close then frees the new run's slot. The work under the bin is short: interrupting futures, a
+     * monitor held only for a put, and a budget lock never held while waiting, none of which calls back in here.
      */
     public boolean release(UUID runId) {
-        Entry entry = runs.remove(runId);
-        if (entry == null) {
-            return false;
-        }
-        release(entry);
-        return true;
+        boolean[] released = new boolean[1];
+        runs.computeIfPresent(runId, (key, entry) -> {
+            release(entry);
+            released[0] = true;
+            return null;
+        });
+        return released[0];
     }
 
     private static void release(Entry entry) {
@@ -369,19 +376,18 @@ public class RunRegistry {
                 continue;
             }
             // Re-read inside the map's own computation. A two-argument remove would not help: touch() mutates the
-            // entry in place, so the value compares equal either way.
+            // entry in place, so the value compares equal either way. Released inside it too, for the reason
+            // release(UUID) gives.
             Entry[] taken = new Entry[1];
             runs.computeIfPresent(run.getKey(), (key, entry) -> {
                 if (entry.lastDriven.get() > cutoff) {
                     return entry;
                 }
+                release(entry);
                 taken[0] = entry;
                 return null;
             });
-            // Outside the computation: stopping a scan and closing a buffer is not work to do under a map bin. The
-            // run is gone by now, so a lifecycle call finds nothing, which is the contract's expected answer.
             if (taken[0] != null) {
-                release(taken[0]);
                 abandoned.add(run.getKey());
                 logger
                         .warn("Run {} abandoned after {} without a lifecycle call from the platform", run.getKey(),
