@@ -196,8 +196,10 @@ class LiveProgressTest {
                 .atMost(Duration.ofSeconds(10))
                 .until(() -> service.status(runRequest(runId)).getProgress().getTargetsProcessed() >= 5L);
 
-        probes.release.countDown();
+        // Stopped while held: released first, the scan can finish before the stop lands, and a finished run refuses
+        // a stop.
         service.stop(runRequest(runId));
+        probes.release.countDown();
 
         DiscoveryProgressDto progress = service.status(runRequest(runId)).getProgress();
         Assertions

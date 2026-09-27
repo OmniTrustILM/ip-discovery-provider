@@ -15,6 +15,7 @@ import com.otilm.api.model.connector.discovery.v2.DiscoveryV2ScopedRequestDto;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.api.v2.CheckpointLostException;
 import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
@@ -234,16 +235,10 @@ public class DiscoveryRunService {
         DiscoveryRunState current = registry.state(runId).orElse(null);
         if (current != null && TERMINAL.contains(current)) {
             // Core allows a stop while its own status is IN_PROGRESS, which it keeps through the tail drain after
-            // this connector has reported COMPLETED. Relabelling here would tell Core a finished run is stopped, and
-            // a stop landing after FAILED would hide why it failed.
-            logger.info("Run {} already ended as {}; the stop is a no-op", runId, current);
-            DiscoveryStopResponseDto ended = new DiscoveryStopResponseDto();
-            ended
-                    .setCheckpoint(registry
-                            .find(runId)
-                            .orElseThrow(() -> new UnknownRunException(runId))
-                            .encode());
-            return ended;
+            // this connector has reported COMPLETED. Any success here has Core record the run as stopped and delete
+            // its drain, so a completed run stops draining and a failed one hides why it failed. Refused, Core keeps
+            // the run as it was.
+            throw new RunPastPointOfNoReturnException(runId, current.getLabel());
         }
         // Marked stopped before the scan is asked to stop, so a chunk finishing in between cannot move the
         // checkpoint after this call has answered with one.

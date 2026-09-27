@@ -14,6 +14,7 @@ import com.otilm.api.model.connector.discovery.v2.DiscoveryRunRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
@@ -311,23 +312,22 @@ class DiscoveryRunServiceTest {
 
     /**
      * Core allows a stop while its own status is still IN_PROGRESS, which it stays through the tail drain after this
-     * connector has reported the run complete. Relabelling then would tell Core a finished run is merely stopped,
-     * and it would sit there until somebody resumed it. Stopping a run that is genuinely scanning is what
-     * StopResumeSeamTest covers.
+     * connector has reported the run complete. Answered as a success, Core records the finished run as stopped and
+     * deletes its drain; refused as past the point of no return, Core keeps draining and the run completes. Stopping
+     * a run that is genuinely scanning is what StopResumeSeamTest covers.
      */
     @Test
-    void leavesARunThatHasAlreadyFinishedAlone() {
+    void refusesToStopARunThatHasAlreadyFinished() {
         UUID runId = UUID.randomUUID();
         service.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
         awaitCompletion(runId);
+        RunHandle before = registry.find(runId).orElseThrow();
 
-        var stopped = service.stop(runRequest(runId));
+        var request = runRequest(runId);
+        Assertions.assertThrows(RunPastPointOfNoReturnException.class, () -> service.stop(request));
 
-        Assertions
-                .assertEquals(DiscoveryRunState.COMPLETED, registry.state(runId).orElseThrow(),
-                        "a completed run must not be relabelled by a late stop");
-        RunHandle handle = RunHandle.from(stopped.getCheckpoint()).orElseThrow();
-        Assertions.assertEquals(4L, handle.sequenceHighWater(), "the checkpoint still describes what it produced");
+        Assertions.assertEquals(DiscoveryRunState.COMPLETED, registry.state(runId).orElseThrow());
+        Assertions.assertEquals(before, registry.find(runId).orElseThrow(), "a refused stop changes nothing");
     }
 
     @Test
@@ -335,7 +335,6 @@ class DiscoveryRunServiceTest {
         UUID runId = UUID.randomUUID();
         service.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
         awaitCompletion(runId);
-        service.stop(runRequest(runId));
         registry.setState(runId, DiscoveryRunState.RUNNING);
         int probedBefore = probes.probed.get();
 

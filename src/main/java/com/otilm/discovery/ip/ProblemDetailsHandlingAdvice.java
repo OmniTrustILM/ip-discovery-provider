@@ -8,6 +8,7 @@ import com.otilm.discovery.ip.api.v2.AttributeCallbackNotSupportedException;
 import com.otilm.discovery.ip.api.v2.AttributeDefinitionNotFoundException;
 import com.otilm.discovery.ip.api.v2.CheckpointLostException;
 import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.v2.BufferBudget;
 import org.slf4j.Logger;
@@ -163,6 +164,18 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     public ProblemDetail handleCheckpointLost(CheckpointLostException ex) {
         LOG.warn("Checkpoint refused: {}", ex.getMessage());
         return ProblemDetailExtended.fromErrorCode(ErrorCode.CHECKPOINT_LOST, ex.getMessage(), null, null);
+    }
+
+    /**
+     * The contract's answer for a stop that comes after the run ended. Core rethrows it before recording anything, so
+     * a completed run keeps draining and a failed one stays failed, where a success would have recorded either as
+     * stopped.
+     */
+    @ExceptionHandler(RunPastPointOfNoReturnException.class)
+    public ProblemDetail handlePastPointOfNoReturn(RunPastPointOfNoReturnException ex) {
+        LOG.info("Stop refused: {}", ex.getMessage());
+        return ProblemDetailExtended
+                .fromErrorCode(ErrorCode.OPERATION_PAST_POINT_OF_NO_RETURN, ex.getMessage(), null, null);
     }
 
     /**

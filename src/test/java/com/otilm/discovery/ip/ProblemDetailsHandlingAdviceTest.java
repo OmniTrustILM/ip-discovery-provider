@@ -7,6 +7,7 @@ import com.otilm.api.model.common.error.ProblemDetailExtended;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.api.v2.CheckpointLostException;
 import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.v2.BufferBudget;
 import org.junit.jupiter.api.Assertions;
@@ -173,6 +174,17 @@ class ProblemDetailsHandlingAdviceTest {
         Assertions.assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), problem.getStatus());
         Assertions.assertEquals(ErrorCode.SERVICE_UNAVAILABLE, errorCodeOf(problem));
         Assertions.assertTrue(problem.getDetail().contains("per-run cap"), problem.getDetail());
+    }
+
+    /** The contract's answer for a stop that comes too late: Core keeps the run as it was rather than stopping it. */
+    @Test
+    void answers422AndPastPointOfNoReturnForAStopOnAFinishedRun() {
+        ProblemDetail problem = advice
+                .handlePastPointOfNoReturn(new RunPastPointOfNoReturnException(UUID.randomUUID(), "Completed"));
+
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), problem.getStatus());
+        Assertions.assertEquals(ErrorCode.OPERATION_PAST_POINT_OF_NO_RETURN, errorCodeOf(problem));
+        Assertions.assertTrue(problem.getDetail().contains("Completed"), problem.getDetail());
     }
 
     private static ErrorCode errorCodeOf(ProblemDetail problem) {

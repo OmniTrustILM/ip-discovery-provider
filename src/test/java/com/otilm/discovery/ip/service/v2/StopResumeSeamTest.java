@@ -207,8 +207,10 @@ class StopResumeSeamTest {
         service.initiate(initiateRequest(runId));
         Assertions.assertTrue(probes.reached.await(20, TimeUnit.SECONDS));
         Awaitility.await().atMost(Duration.ofSeconds(10)).until(() -> registry.buffer(runId).orElseThrow().held() > 0);
-        probes.release.countDown();
+        // Stopped while held: released first, the scan can finish before the stop lands, and a finished run refuses
+        // a stop. Released after, so the resumed scan does not park on the same target.
         service.stop(runRequest(runId, null));
+        probes.release.countDown();
 
         ResultBuffer beforeResume = registry.buffer(runId).orElseThrow();
         int heldBeforeResume = beforeResume.held();
