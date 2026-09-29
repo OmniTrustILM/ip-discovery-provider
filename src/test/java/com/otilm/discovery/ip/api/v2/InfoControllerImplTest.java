@@ -103,16 +103,12 @@ class InfoControllerImplTest {
     /**
      * Stop and resume are advertised because a stopped run survives the connector restarting: the scan is
      * interruptible, the checkpoint travels in the run's meta, and a run this node no longer holds is rebuilt from
-     * it. Streaming is not, and must not be — Core has no stream client, so the flag would promise a path nothing
-     * uses and the endpoint answers as unsupported.
+     * it.
      */
     @Test
-    void advertisesStopAndResumeButNotStreaming() {
+    void advertisesStopAndResume() {
         List<FeatureFlag> features = declarationOf(ConnectorInterface.DISCOVERY).getFeatures();
 
         Assertions.assertEquals(List.of(FeatureFlag.DISCOVERY_STOP_RESUME), features);
-        Assertions
-                .assertFalse(features.contains(FeatureFlag.DISCOVERY_STREAMING),
-                        "streaming is unimplemented, so advertising it would be a false claim");
     }
 }
