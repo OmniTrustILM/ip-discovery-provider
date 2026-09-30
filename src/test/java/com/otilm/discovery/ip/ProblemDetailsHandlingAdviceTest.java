@@ -10,16 +10,15 @@ import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.v2.BufferBudget;
+import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
-import org.springframework.core.MethodParameter;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
-import java.util.UUID;
 
 class ProblemDetailsHandlingAdviceTest {
 
@@ -27,17 +26,17 @@ class ProblemDetailsHandlingAdviceTest {
 
     /**
      * The two error models must not bleed while both surfaces serve: v1 answers with {@code ErrorMessageDto} and v2
-     * with problem+json. This advice is scoped by annotation rather than by package or globally, and this is what
-     * fails if someone widens it.
+     * with problem+json. This advice is scoped by annotation rather than by package or globally, and this is what fails
+     * if someone widens it.
      */
     @Test
     void appliesOnlyToControllersMarkedAsV2() {
-        RestControllerAdvice scope =
-                AnnotationUtils.findAnnotation(ProblemDetailsHandlingAdvice.class, RestControllerAdvice.class);
+        RestControllerAdvice scope = AnnotationUtils
+                .findAnnotation(ProblemDetailsHandlingAdvice.class, RestControllerAdvice.class);
 
         Assertions.assertNotNull(scope);
         Assertions
-                .assertArrayEquals(new Class<?>[] {ConnectorV2Api.class}, scope.annotations(),
+                .assertArrayEquals(new Class<?>[]{ConnectorV2Api.class}, scope.annotations(),
                         "the v2 advice must bind to ConnectorV2Api alone, or it will answer v1 callers in a shape "
                                 + "they cannot read");
     }
@@ -68,9 +67,9 @@ class ProblemDetailsHandlingAdviceTest {
     }
 
     /**
-     * The converter's own message names the target type in full, so echoing it publishes the platform's package
-     * layout to anyone who sends a bad resource code. The caller's value and the parameter name say everything a
-     * caller can act on.
+     * The converter's own message names the target type in full, so echoing it publishes the platform's package layout
+     * to anyone who sends a bad resource code. The caller's value and the parameter name say everything a caller can
+     * act on.
      */
     @Test
     void namesTheRejectedValueWithoutTheTargetTypeItFailedToConvertTo() {
@@ -116,8 +115,8 @@ class ProblemDetailsHandlingAdviceTest {
 
     /**
      * The catch-all is the ungated handler, so anything without a specific mapping arrives here — SQL text, host
-     * resolution failures, constraint violations. The v1 advice was changed for exactly this reason and the v2 one
-     * must not reintroduce the leak.
+     * resolution failures, constraint violations. The v1 advice was changed for exactly this reason and the v2 one must
+     * not reintroduce the leak.
      */
     @Test
     void doesNotPutAnUnmappedFailuresMessageOnTheWire() {

@@ -13,8 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 /**
- * Asserts both error shapes against the same class of failure, so neither advice can widen beyond its own surface.
- * The boundary itself is explained on {@link com.otilm.discovery.ip.ProblemDetailsHandlingAdvice}.
+ * Asserts both error shapes against the same class of failure, so neither advice can widen beyond its own surface. The
+ * boundary itself is explained on {@link com.otilm.discovery.ip.ProblemDetailsHandlingAdvice}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ErrorModelBoundaryTest {
@@ -24,26 +24,24 @@ class ErrorModelBoundaryTest {
 
     @Test
     void answersAV2FailureWithProblemJson() {
-        ResponseEntity<String> response =
-                rest.getForEntity("/v2/discoveryProvider/secrets/attributes", String.class);
+        ResponseEntity<String> response = rest.getForEntity("/v2/discoveryProvider/secrets/attributes", String.class);
 
         Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
         Assertions
                 .assertTrue(
-                        response.getHeaders().getContentType()
-                                .equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
+                        response.getHeaders().getContentType().equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
                         "expected problem+json, got " + response.getHeaders().getContentType());
         Assertions.assertTrue(response.getBody().contains("\"status\":422"), response.getBody());
     }
 
     /**
-     * A body that will not parse is handled by the base class unless the advice overrides it, and that answer omits
-     * the {@code errorCode} a caller acts on. This is the only POST on the v2 surface, so it is the path where a
-     * malformed body actually arrives.
+     * A body that will not parse is handled by the base class unless the advice overrides it, and that answer omits the
+     * {@code errorCode} a caller acts on. This is the only POST on the v2 surface, so it is the path where a malformed
+     * body actually arrives.
      *
      * <p>
-     * The code is asserted rather than merely present: {@code VALIDATION_FAILED} would tell Core a field rule
-     * failed on a body that never parsed into fields at all.
+     * The code is asserted rather than merely present: {@code VALIDATION_FAILED} would tell Core a field rule failed on
+     * a body that never parsed into fields at all.
      */
     @Test
     void answersAnUnreadableBodyAsABadRequestInTheV2Envelope() {
@@ -56,8 +54,7 @@ class ErrorModelBoundaryTest {
         Assertions.assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         Assertions
                 .assertTrue(
-                        response.getHeaders().getContentType()
-                                .equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
+                        response.getHeaders().getContentType().equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
                         "expected problem+json, got " + response.getHeaders().getContentType());
         Assertions
                 .assertTrue(response.getBody().contains("\"" + ErrorCode.BAD_REQUEST.name() + "\""),
@@ -69,8 +66,7 @@ class ErrorModelBoundaryTest {
 
     @Test
     void answersTheSameFailureOnV1WithTheV1ErrorShape() {
-        ResponseEntity<String> response =
-                rest.getForEntity("/v1/discoveryProvider/Nonsense/attributes", String.class);
+        ResponseEntity<String> response = rest.getForEntity("/v1/discoveryProvider/Nonsense/attributes", String.class);
 
         Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
         Assertions
@@ -87,8 +83,8 @@ class ErrorModelBoundaryTest {
      */
     @Test
     void bindsTheResourcePathByItsWireCode() {
-        ResponseEntity<String> response =
-                rest.getForEntity("/v2/discoveryProvider/certificates/attributes", String.class);
+        ResponseEntity<String> response = rest
+                .getForEntity("/v2/discoveryProvider/certificates/attributes", String.class);
 
         Assertions.assertEquals(HttpStatus.OK, response.getStatusCode());
         Assertions.assertEquals("[]", response.getBody());
@@ -96,8 +92,7 @@ class ErrorModelBoundaryTest {
 
     @Test
     void rejectsAPathThatNamesNoResourceAtAll() {
-        ResponseEntity<String> response =
-                rest.getForEntity("/v2/discoveryProvider/nonsense/attributes", String.class);
+        ResponseEntity<String> response = rest.getForEntity("/v2/discoveryProvider/nonsense/attributes", String.class);
 
         Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
     }

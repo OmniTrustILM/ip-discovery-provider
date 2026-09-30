@@ -11,6 +11,7 @@ import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.v2.BufferBudget;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -28,16 +29,14 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import java.util.stream.Collectors;
-
 /**
  * Renders v2 failures as RFC 9457 problem+json.
  *
  * <p>
  * Bound to {@link ConnectorV2Api} rather than to everything: v1 keeps answering with {@code ErrorMessageDto} through
- * {@code ExceptionHandlingAdvice} for as long as both surfaces serve, and a v2 shape reaching a v1 caller would break
- * a Core that has not migrated. {@code HIGHEST_PRECEDENCE} is what makes this win over the v1 advice for the
- * controllers it covers.
+ * {@code ExceptionHandlingAdvice} for as long as both surfaces serve, and a v2 shape reaching a v1 caller would break a
+ * Core that has not migrated. {@code HIGHEST_PRECEDENCE} is what makes this win over the v1 advice for the controllers
+ * it covers.
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice(annotations = ConnectorV2Api.class)
@@ -66,15 +65,15 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
      * A body that will not parse at all.
      *
      * <p>
-     * <b>Error shape:</b> the base class answers with a plain {@link ProblemDetail}, which carries no
-     * {@code errorCode} — the field Core acts on — so without this a malformed callback would get a different
-     * envelope from every other rejected request on the surface.
+     * <b>Error shape:</b> the base class answers with a plain {@link ProblemDetail}, which carries no {@code errorCode}
+     * — the field Core acts on — so without this a malformed callback would get a different envelope from every other
+     * rejected request on the surface.
      *
      * <p>
      * <b>Code:</b> {@code BAD_REQUEST}, not {@code VALIDATION_FAILED}. {@link ErrorCode} draws that line itself, on
-     * {@code CONTEXT_MISMATCH}: validation failing means "the body is well formed, so no field rule is what
-     * failed". Nothing was parsed here, so there was no field to apply a rule to. The 400 comes from the code
-     * rather than a literal, so the two cannot drift apart.
+     * {@code CONTEXT_MISMATCH}: validation failing means "the body is well formed, so no field rule is what failed".
+     * Nothing was parsed here, so there was no field to apply a rule to. The 400 comes from the code rather than a
+     * literal, so the two cannot drift apart.
      */
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
@@ -102,20 +101,20 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         LOG.error("Invalid argument: {}", ex.getMessage(), ex);
         return ProblemDetailExtended
-                .fromErrorCode(ErrorCode.VALIDATION_FAILED, "The request carried an argument this connector "
-                        + "could not accept.", null, null);
+                .fromErrorCode(ErrorCode.VALIDATION_FAILED,
+                        "The request carried an argument this connector " + "could not accept.", null, null);
     }
 
     /**
      * A path variable that will not convert — a resource code naming no resource.
      *
      * <p>
-     * <b>Status:</b> 422, not the 400 Spring would answer. The request reached the right route and named something
-     * that does not exist, which is the same failure as asking for a resource this connector does not discover.
+     * <b>Status:</b> 422, not the 400 Spring would answer. The request reached the right route and named something that
+     * does not exist, which is the same failure as asking for a resource this connector does not discover.
      *
      * <p>
-     * <b>Error shape:</b> without a handler here Spring answers with its own default body, giving a v2 caller a
-     * third shape from a surface that promises problem+json.
+     * <b>Error shape:</b> without a handler here Spring answers with its own default body, giving a v2 caller a third
+     * shape from a surface that promises problem+json.
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ProblemDetail handleUnconvertibleArgument(MethodArgumentTypeMismatchException ex) {
@@ -156,8 +155,8 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     }
 
     /**
-     * 410 rather than 404: the run is recognised, and it is the checkpoint that cannot be continued. Core reads the
-     * two differently, and collapsing them would turn an upgrade that reordered the enumeration into a run that never
+     * 410 rather than 404: the run is recognised, and it is the checkpoint that cannot be continued. Core reads the two
+     * differently, and collapsing them would turn an upgrade that reordered the enumeration into a run that never
      * existed.
      */
     @ExceptionHandler(CheckpointLostException.class)
@@ -167,8 +166,8 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     }
 
     /**
-     * The contract's answer for a stop that comes after the run ended. Core rethrows it before recording anything, so
-     * a completed run keeps draining and a failed one stays failed, where a success would have recorded either as
+     * The contract's answer for a stop that comes after the run ended. Core rethrows it before recording anything, so a
+     * completed run keeps draining and a failed one stays failed, where a success would have recorded either as
      * stopped.
      */
     @ExceptionHandler(RunPastPointOfNoReturnException.class)
@@ -182,8 +181,8 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
      * A node at its run cap, answered as retryable.
      *
      * <p>
-     * <b>Current Core behaviour:</b> Core does not retry. It ends the run on any initiate failure and renders this
-     * code as the connector being unreachable, so an operator whose node is merely full is told it is down.
+     * <b>Current Core behaviour:</b> Core does not retry. It ends the run on any initiate failure and renders this code
+     * as the connector being unreachable, so an operator whose node is merely full is told it is down.
      *
      * <p>
      * <b>Contract gap:</b> saying so honestly needs a capacity code in the contract.
@@ -211,15 +210,15 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     }
 
     /**
-     * The code is what a caller acts on. The message is withheld for the same reason as the other generic handlers:
-     * any library can raise this, and a route that needs to say more should raise an exception of its own.
+     * The code is what a caller acts on. The message is withheld for the same reason as the other generic handlers: any
+     * library can raise this, and a route that needs to say more should raise an exception of its own.
      */
     @ExceptionHandler(UnsupportedOperationException.class)
     public ProblemDetail handleUnsupported(UnsupportedOperationException ex) {
         LOG.error("Operation not supported: {}", ex.getMessage(), ex);
         return ProblemDetailExtended
-                .fromErrorCode(ErrorCode.OPERATION_NOT_SUPPORTED, "This operation is not supported by this "
-                        + "connector.", null, null);
+                .fromErrorCode(ErrorCode.OPERATION_NOT_SUPPORTED,
+                        "This operation is not supported by this " + "connector.", null, null);
     }
 
     @ExceptionHandler(Exception.class)

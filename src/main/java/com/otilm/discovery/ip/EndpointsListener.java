@@ -1,6 +1,8 @@
 package com.otilm.discovery.ip;
 
 import com.otilm.api.model.core.connector.EndpointDto;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
@@ -8,9 +10,6 @@ import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Component
 public class EndpointsListener {
@@ -22,14 +21,17 @@ public class EndpointsListener {
     @EventListener
     public void handleContextRefresh(ContextRefreshedEvent event) {
         ApplicationContext applicationContext = event.getApplicationContext();
-        applicationContext.getBean("requestMappingHandlerMapping", RequestMappingHandlerMapping.class)
+        applicationContext
+                .getBean("requestMappingHandlerMapping", RequestMappingHandlerMapping.class)
                 .getHandlerMethods()
-                .entrySet().stream()
-                .filter(e -> (e.getKey().getMethodsCondition().getMethods() != null && !e.getKey().getMethodsCondition().getMethods().isEmpty()))
+                .entrySet()
+                .stream()
+                .filter(e -> (e.getKey().getMethodsCondition().getMethods() != null
+                        && !e.getKey().getMethodsCondition().getMethods().isEmpty()))
                 .forEach(e -> {
-                    LOGGER.info("{} {} {}", e.getKey().getMethodsCondition().getMethods(),
-                            e.getKey().getPatternValues(),
-                            e.getValue().getMethod().getName());
+                    LOGGER
+                            .info("{} {} {}", e.getKey().getMethodsCondition().getMethods(),
+                                    e.getKey().getPatternValues(), e.getValue().getMethod().getName());
 
                     EndpointDto endpoint = new EndpointDto();
                     endpoint.setMethod(e.getKey().getMethodsCondition().getMethods().iterator().next().name());

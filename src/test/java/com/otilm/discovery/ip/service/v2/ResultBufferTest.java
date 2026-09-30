@@ -1,9 +1,6 @@
 package com.otilm.discovery.ip.service.v2;
 
 import com.otilm.api.model.connector.discovery.v2.DiscoveredItemDto;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
@@ -18,6 +15,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 class ResultBufferTest {
 
@@ -58,15 +57,12 @@ class ResultBufferTest {
         ConcurrentLinkedQueue<Long> assigned = new ConcurrentLinkedQueue<>();
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Callable<Object>> work = IntStream
-                    .range(0, producers)
-                    .<Callable<Object>>mapToObj(p -> () -> {
-                        for (int i = 0; i < perProducer; i++) {
-                            assigned.add(buffer.add(item(p + "-" + i), ITEM_BYTES));
-                        }
-                        return null;
-                    })
-                    .toList();
+            List<Callable<Object>> work = IntStream.range(0, producers).<Callable<Object>>mapToObj(p -> () -> {
+                for (int i = 0; i < perProducer; i++) {
+                    assigned.add(buffer.add(item(p + "-" + i), ITEM_BYTES));
+                }
+                return null;
+            }).toList();
             executor.invokeAll(work);
         }
 
@@ -103,7 +99,8 @@ class ResultBufferTest {
 
         ResultBuffer.Page page = buffer.page(2, 10, 1L << 20);
 
-        Assertions.assertEquals(List.of(3L, 4L, 5L), page.items().stream().map(DiscoveredItemDto::getSequence).toList());
+        Assertions
+                .assertEquals(List.of(3L, 4L, 5L), page.items().stream().map(DiscoveredItemDto::getSequence).toList());
         Assertions.assertEquals(5, page.highestSequence());
         Assertions.assertFalse(page.more());
     }
@@ -130,13 +127,14 @@ class ResultBufferTest {
         }
 
         Assertions
-                .assertEquals(buffer.page(1, 10, 1L << 20).items().stream().map(DiscoveredItemDto::getSequence).toList(),
+                .assertEquals(
+                        buffer.page(1, 10, 1L << 20).items().stream().map(DiscoveredItemDto::getSequence).toList(),
                         buffer.page(1, 10, 1L << 20).items().stream().map(DiscoveredItemDto::getSequence).toList());
     }
 
     /**
-     * Core advances its cursor to the highest sequence in a page, not to the contiguous end, so serving items as
-     * though they followed a stale cursor would complete a run with everything in between missing.
+     * Core advances its cursor to the highest sequence in a page, not to the contiguous end, so serving items as though
+     * they followed a stale cursor would complete a run with everything in between missing.
      */
     @Test
     void answersACursorBelowTheWatermarkWithAnEmptyPage() throws Exception {
@@ -167,8 +165,9 @@ class ResultBufferTest {
         buffer.discardThrough(4);
 
         Assertions.assertEquals(2, buffer.held());
-        Assertions.assertEquals(List.of(5L, 6L),
-                buffer.page(4, 10, 1L << 20).items().stream().map(DiscoveredItemDto::getSequence).toList());
+        Assertions
+                .assertEquals(List.of(5L, 6L),
+                        buffer.page(4, 10, 1L << 20).items().stream().map(DiscoveredItemDto::getSequence).toList());
     }
 
     /** A re-published drain acknowledging a cursor already seen frees nothing the second time. */
@@ -399,7 +398,6 @@ class ResultBufferTest {
         ((java.util.concurrent.atomic.AtomicLong) sequencer.get(buffer)).incrementAndGet();
     }
 
-
     /**
      * A probe already past its budget reservation when the run ends would otherwise publish into a map that has just
      * been cleared, leaving an item nothing will ever read. Reaching that interleaving through the public API is not
@@ -420,10 +418,9 @@ class ResultBufferTest {
         Assertions.assertEquals(1, buffer.held(), "the item published before the close is untouched");
     }
 
-
     /**
-     * Acknowledging past what the run has issued would mark unissued numbers discarded, and every item later given
-     * one of them would be answered as already taken — silent loss on a run that completes.
+     * Acknowledging past what the run has issued would mark unissued numbers discarded, and every item later given one
+     * of them would be answered as already taken — silent loss on a run that completes.
      */
     @Test
     void refusesAnAcknowledgementAboveTheSequencesItHasIssued() throws Exception {

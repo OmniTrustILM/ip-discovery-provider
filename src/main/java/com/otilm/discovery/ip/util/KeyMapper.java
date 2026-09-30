@@ -21,8 +21,8 @@ import java.util.Locale;
  *
  * <p>
  * These are the certificates' own keys, not independently discovered ones: a run asking for {@code keys} gets the
- * public keys of the certificates it would otherwise have got, at no extra network cost, because a TLS handshake
- * yields the whole chain.
+ * public keys of the certificates it would otherwise have got, at no extra network cost, because a TLS handshake yields
+ * the whole chain.
  */
 public final class KeyMapper {
 
@@ -62,9 +62,9 @@ public final class KeyMapper {
      * Maps a JCA algorithm name onto the platform's enum.
      *
      * <p>
-     * The fallback is deliberate and is {@code UNKNOWN} rather than dropping the item or failing the run: an
-     * algorithm this enum does not carry is still a key worth reporting, and reporting what is known beats reporting
-     * nothing. Both alternatives lose information an operator asked for.
+     * The fallback is deliberate and is {@code UNKNOWN} rather than dropping the item or failing the run: an algorithm
+     * this enum does not carry is still a key worth reporting, and reporting what is known beats reporting nothing.
+     * Both alternatives lose information an operator asked for.
      */
     public static KeyAlgorithm algorithmOf(String jcaName) {
         if (jcaName == null) {

@@ -7,11 +7,10 @@ import com.otilm.api.model.connector.discovery.v2.DiscoverySupportedResourceDto;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.ConnectorV2Api;
 import com.otilm.discovery.ip.service.v2.DiscoveryAttributeService;
-import org.springframework.web.bind.annotation.RestController;
-
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @ConnectorV2Api
@@ -40,10 +39,10 @@ public class DiscoveryMetadataControllerImpl implements DiscoveryMetadataControl
     }
 
     /**
-     * Every attribute this connector defines configures the run as a whole — the addresses, the ports, the
-     * parallelism — so neither resource refines it further. The route still validates its argument: answering an
-     * empty list for a resource the connector does not discover would report "nothing to configure" where the honest
-     * answer is "not offered here".
+     * Every attribute this connector defines configures the run as a whole — the addresses, the ports, the parallelism
+     * — so neither resource refines it further. The route still validates its argument: answering an empty list for a
+     * resource the connector does not discover would report "nothing to configure" where the honest answer is "not
+     * offered here".
      */
     @Override
     public List<BaseAttribute> listResourceAttributes(Resource resource) {

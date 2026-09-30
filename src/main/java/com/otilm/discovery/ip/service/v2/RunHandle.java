@@ -25,14 +25,13 @@ import java.util.Optional;
  * the sequence are {@code long}, which the integer content type cannot hold, and a checkpoint is opaque to Core, so
  * spreading it over labelled attributes would dress internal state as something an operator is meant to read.
  *
- * @param state             separates a stopped run that can be rebuilt from a running one that must not be — without
- *                          it, a run checkpointed before it scanned anything is indistinguishable from one that never
- *                          started
- * @param cursorIndex       next target index to scan
+ * @param state separates a stopped run that can be rebuilt from a running one that must not be — without it, a run
+ * checkpointed before it scanned anything is indistinguishable from one that never started
+ * @param cursorIndex next target index to scan
  * @param sequenceHighWater highest sequence assigned; a resumed run continues this space and never restarts it
- * @param targetsDigest     the resume guard: any change to enumeration order invalidates it, and the run is refused
- *                          loudly rather than resumed at the wrong offset
- * @param yieldByResource   items produced per resource wire code, so per-resource progress survives a stop
+ * @param targetsDigest the resume guard: any change to enumeration order invalidates it, and the run is refused loudly
+ * rather than resumed at the wrong offset
+ * @param yieldByResource items produced per resource wire code, so per-resource progress survives a stop
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater, String targetsDigest,
@@ -47,11 +46,12 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
      * one written by a newer connector can arrive at an older one, and refusing it would fail a run over a field that
      * older code simply does not need.
      */
-    private static final ObjectMapper MAPPER =
-            new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     public enum RunState {
-        RUNNING, STOPPED
+        RUNNING,
+        STOPPED
     }
 
     /** The handle a run starts from, before a single target has been probed. */
@@ -140,10 +140,10 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
     }
 
     /**
-     * What a checkpoint has to mean, not just parse as. Jackson fills a missing field with null or zero, so a
-     * truncated or hostile checkpoint reaches the scan as a negative cursor indexing the enumeration, a sequence
-     * space that runs backwards, or a null map that fails later with nothing naming the cause. The contract
-     * documents a validation failure for an unreadable checkpoint, and this is the other half of unreadable.
+     * What a checkpoint has to mean, not just parse as. Jackson fills a missing field with null or zero, so a truncated
+     * or hostile checkpoint reaches the scan as a negative cursor indexing the enumeration, a sequence space that runs
+     * backwards, or a null map that fails later with nothing naming the cause. The contract documents a validation
+     * failure for an unreadable checkpoint, and this is the other half of unreadable.
      */
     private RunHandle validated() {
         if (state == null) {
@@ -160,8 +160,8 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
             // Every committed chunk advances both by the same count, including the short final one, so these are
             // equal on any checkpoint this connector wrote. A cursor ahead of the count would resume mid-enumeration
             // and skip everything in between, on a run that still reports success.
-            throw new ValidationException("Run checkpoint resumes at target " + cursorIndex + " having processed "
-                    + targetsProcessed);
+            throw new ValidationException(
+                    "Run checkpoint resumes at target " + cursorIndex + " having processed " + targetsProcessed);
         }
         if (targetsFailed > targetsProcessed) {
             throw new ValidationException("Run checkpoint reports " + targetsFailed + " failed targets within "

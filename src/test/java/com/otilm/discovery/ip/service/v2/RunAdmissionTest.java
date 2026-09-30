@@ -1,5 +1,6 @@
 package com.otilm.discovery.ip.service.v2;
 
+import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.attribute.RequestAttributeV3;
 import com.otilm.api.model.common.attribute.common.MetadataAttribute;
@@ -7,23 +8,17 @@ import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
 import com.otilm.api.model.common.attribute.v3.content.BaseAttributeContentV3;
 import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryDrainRequestDto;
-import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryInitiateRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryInitiateResponseDto;
-import com.otilm.api.model.connector.discovery.v2.DiscoveryStopResponseDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
+import com.otilm.api.model.connector.discovery.v2.DiscoveryStopResponseDto;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
 import com.otilm.discovery.ip.util.TargetEnumeration;
-import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.info.BuildProperties;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
@@ -32,15 +27,19 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 /**
  * Who gets admitted to this node, and what a refusal means. The two refusals mean opposite things: a repeat must be
@@ -76,8 +75,8 @@ class RunAdmissionTest {
         attribute.setName(name);
         attribute.setContentType(AttributeContentType.STRING);
         attribute
-                .setContent(Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new)
-                        .toList());
+                .setContent(
+                        Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new).toList());
         return attribute;
     }
 
@@ -185,9 +184,9 @@ class RunAdmissionTest {
     // --- one resume wins ---
 
     /**
-     * Two resumes can both read STOPPED. Both starting a scan puts two sequencers on one run issuing the same
-     * numbers, lets the cursor move backwards as their chunk commits interleave, and leaves the loser buffer
-     * charging the budget with items nothing will ever serve.
+     * Two resumes can both read STOPPED. Both starting a scan puts two sequencers on one run issuing the same numbers,
+     * lets the cursor move backwards as their chunk commits interleave, and leaves the loser buffer charging the budget
+     * with items nothing will ever serve.
      */
     @Test
     void onlyOneOfSeveralConcurrentResumesStartsAScan() throws Exception {
@@ -220,8 +219,8 @@ class RunAdmissionTest {
 
     /**
      * Two resumes can both pass Core's STOPPED check, and Core stores whichever answer it commits first as the run's
-     * checkpoint. Answered before the first resume finishes, the duplicate hands back the STOPPED checkpoint it read
-     * on arrival while the run is in fact scanning.
+     * checkpoint. Answered before the first resume finishes, the duplicate hands back the STOPPED checkpoint it read on
+     * arrival while the run is in fact scanning.
      */
     @Test
     void aDuplicateResumeAnswersWithWhatTheFirstLeft() throws Exception {
@@ -234,8 +233,8 @@ class RunAdmissionTest {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             Future<DiscoveryInitiateResponseDto> first = executor.submit(() -> service.resume(runRequest(runId, null)));
             Assertions.assertTrue(attributes.entered.await(10, TimeUnit.SECONDS));
-            Future<DiscoveryInitiateResponseDto> duplicate =
-                    executor.submit(() -> service.resume(runRequest(runId, null)));
+            Future<DiscoveryInitiateResponseDto> duplicate = executor
+                    .submit(() -> service.resume(runRequest(runId, null)));
 
             Assertions
                     .assertThrows(TimeoutException.class, () -> duplicate.get(300, TimeUnit.MILLISECONDS),
@@ -249,8 +248,8 @@ class RunAdmissionTest {
     }
 
     /**
-     * A duplicate that answered success while the first resume went on to fail would leave Core recording a running
-     * run that nothing is scanning. Waiting instead, it finds the run put back to STOPPED and resumes it itself.
+     * A duplicate that answered success while the first resume went on to fail would leave Core recording a running run
+     * that nothing is scanning. Waiting instead, it finds the run put back to STOPPED and resumes it itself.
      */
     @Test
     void aDuplicateResumeTakesOverWhenTheFirstIsRefused() throws Exception {
@@ -263,12 +262,13 @@ class RunAdmissionTest {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             Future<DiscoveryInitiateResponseDto> first = executor.submit(() -> service.resume(runRequest(runId, null)));
             Assertions.assertTrue(attributes.entered.await(10, TimeUnit.SECONDS));
-            Future<DiscoveryInitiateResponseDto> duplicate =
-                    executor.submit(() -> service.resume(runRequest(runId, null)));
+            Future<DiscoveryInitiateResponseDto> duplicate = executor
+                    .submit(() -> service.resume(runRequest(runId, null)));
             Assertions.assertThrows(TimeoutException.class, () -> duplicate.get(300, TimeUnit.MILLISECONDS));
             attributes.release.countDown();
 
-            Assertions.assertThrows(java.util.concurrent.ExecutionException.class, () -> first.get(10, TimeUnit.SECONDS));
+            Assertions
+                    .assertThrows(java.util.concurrent.ExecutionException.class, () -> first.get(10, TimeUnit.SECONDS));
             duplicate.get(10, TimeUnit.SECONDS);
         }
 
@@ -290,7 +290,8 @@ class RunAdmissionTest {
         service.status(runRequest(runId, stoppedCheckpoint().encode()));
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<DiscoveryInitiateResponseDto> resume = executor.submit(() -> service.resume(runRequest(runId, null)));
+            Future<DiscoveryInitiateResponseDto> resume = executor
+                    .submit(() -> service.resume(runRequest(runId, null)));
             Assertions.assertTrue(attributes.entered.await(10, TimeUnit.SECONDS));
             Future<DiscoveryStopResponseDto> stop = executor.submit(() -> service.stop(runRequest(runId, null)));
 
@@ -411,9 +412,7 @@ class RunAdmissionTest {
                     .<Callable<Object>>mapToObj(i -> () -> service.initiate(initiateRequest(runId, HOSTS)))
                     .toList();
             for (var result : executor.invokeAll(initiates)) {
-                Assertions
-                        .assertDoesNotThrow(() -> result.get(),
-                                "no duplicate may be answered as a full node");
+                Assertions.assertDoesNotThrow(() -> result.get(), "no duplicate may be answered as a full node");
             }
         }
 

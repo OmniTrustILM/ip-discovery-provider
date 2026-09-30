@@ -1,11 +1,10 @@
 package com.otilm.discovery.ip.service.v2;
 
+import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.connector.v2.attribute.AttributeCallbackRequestDto;
 import com.otilm.api.model.client.connector.v2.attribute.AttributeCallbackResponseDto;
 import com.otilm.api.model.client.connector.v2.attribute.AttributeDefinitionsDto;
-import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.common.attribute.common.BaseAttribute;
-
 import java.util.List;
 import java.util.UUID;
 

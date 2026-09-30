@@ -28,17 +28,19 @@ import java.util.regex.Pattern;
  */
 public final class TargetEnumeration {
 
-    /** Bump only with a deliberate change to the enumeration order: every stopped run in the field then refuses to resume. */
+    /**
+     * Bump only with a deliberate change to the enumeration order: every stopped run in the field then refuses to
+     * resume.
+     */
     private static final String ENUMERATION_VERSION = "1";
 
     private static final Pattern HOSTNAME_PATTERN = Pattern.compile(AttributeServiceImpl.HOSTNAME_VALIDATION_REGEX);
     private static final Pattern IP_ADDRESS_PATTERN = Pattern.compile(AttributeServiceImpl.IP_ADDRESS_VALIDATION_REGEX);
-    private static final Pattern IP_ADDRESS_RANGE_PATTERN =
-            Pattern.compile(AttributeServiceImpl.IP_ADDRESS_RANGE_VALIDATION_REGEX);
+    private static final Pattern IP_ADDRESS_RANGE_PATTERN = Pattern
+            .compile(AttributeServiceImpl.IP_ADDRESS_RANGE_VALIDATION_REGEX);
     private static final Pattern IP_SUBNET_PATTERN = Pattern.compile(AttributeServiceImpl.IP_SUBNET_VALIDATION_REGEX);
     private static final Pattern PORT_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_VALIDATION_REGEX);
-    private static final Pattern PORT_RANGE_PATTERN =
-            Pattern.compile(AttributeServiceImpl.PORT_RANGE_VALIDATION_REGEX);
+    private static final Pattern PORT_RANGE_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_RANGE_VALIDATION_REGEX);
 
     private static final int MAX_OCTET = 255;
     private static final int MIN_PORT = 1;
@@ -133,12 +135,12 @@ public final class TargetEnumeration {
                 names.add(entry.toLowerCase(Locale.ROOT));
             } else if (IP_ADDRESS_PATTERN.matcher(entry).matches()) {
                 long address = toLong(entry);
-                blocks.add(new long[] {address, address});
+                blocks.add(new long[]{address, address});
             } else if (IP_ADDRESS_RANGE_PATTERN.matcher(entry).matches()) {
                 String[] bounds = entry.split("-");
                 long low = toLong(bounds[0]);
                 long high = toLong(bounds[1]);
-                blocks.add(new long[] {Math.min(low, high), Math.max(low, high)});
+                blocks.add(new long[]{Math.min(low, high), Math.max(low, high)});
             } else if (IP_SUBNET_PATTERN.matcher(entry).matches()) {
                 addSubnet(entry, blocks);
             } else {
@@ -161,7 +163,7 @@ public final class TargetEnumeration {
         long network = address & mask;
         long broadcast = network | (~mask & 0xFFFFFFFFL);
         if (broadcast - network >= 2) {
-            blocks.add(new long[] {network + 1, broadcast - 1});
+            blocks.add(new long[]{network + 1, broadcast - 1});
         }
     }
 
@@ -171,7 +173,7 @@ public final class TargetEnumeration {
      */
     private static long[][] merge(List<long[]> blocks) {
         if (blocks.isEmpty()) {
-            return new long[][] {new long[0], new long[0]};
+            return new long[][]{new long[0], new long[0]};
         }
         blocks.sort((a, b) -> Long.compare(a[0], b[0]));
         List<long[]> mergedBlocks = new ArrayList<>();
@@ -192,7 +194,7 @@ public final class TargetEnumeration {
             low[i] = mergedBlocks.get(i)[0];
             high[i] = mergedBlocks.get(i)[1];
         }
-        return new long[][] {low, high};
+        return new long[][]{low, high};
     }
 
     private static int[] parsePorts(String portSpec, Boolean allPorts) {
@@ -227,7 +229,10 @@ public final class TargetEnumeration {
         return parsed.stream().mapToInt(Integer::intValue).toArray();
     }
 
-    /** Hashes the normalised spec — canonical order, blocks merged, ports as ranges — so two spellings of one scan agree. */
+    /**
+     * Hashes the normalised spec — canonical order, blocks merged, ports as ranges — so two spellings of one scan
+     * agree.
+     */
     private static String digestOf(List<String> hostnames, long[] low, long[] high, int[] ports) {
         StringBuilder canonical = new StringBuilder(ENUMERATION_VERSION).append("|H:");
         canonical.append(String.join(",", hostnames)).append("|A:");
@@ -290,8 +295,7 @@ public final class TargetEnumeration {
             // than read as decimal, because the notation is ambiguous: 010 is octal 8 to inet_aton and decimal 10
             // to Integer.parseInt, so accepting it can mean scanning a host nobody named.
             if (octet.length() > 1 && octet.charAt(0) == '0') {
-                throw new ValidationException(
-                        "Invalid IP address, octets must not carry leading zeros: " + dottedQuad);
+                throw new ValidationException("Invalid IP address, octets must not carry leading zeros: " + dottedQuad);
             }
             int parsed = Integer.parseInt(octet);
             if (parsed > MAX_OCTET) {

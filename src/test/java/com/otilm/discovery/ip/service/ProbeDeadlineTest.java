@@ -1,9 +1,6 @@
 package com.otilm.discovery.ip.service;
 
 import com.otilm.discovery.ip.service.impl.ConnectionServiceImpl;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -12,6 +9,8 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 /** The total deadline, not the read timeout, is what abandons a target that trickles bytes. */
 class ProbeDeadlineTest {
@@ -26,8 +25,8 @@ class ProbeDeadlineTest {
         try (ServerSocket tarpit = new ServerSocket(0, 0, InetAddress.getByName("127.0.0.1"))) {
             AtomicReference<IOException> setupFailure = new AtomicReference<>();
             startTarpit(tarpit, setupFailure);
-            ConnectionService service =
-                    new ConnectionServiceImpl(CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, TOTAL_TIMEOUT_MS);
+            ConnectionService service = new ConnectionServiceImpl(CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS,
+                    TOTAL_TIMEOUT_MS);
             String url = "https://127.0.0.1:" + tarpit.getLocalPort();
 
             long startedAt = System.nanoTime();
@@ -76,7 +75,7 @@ class ProbeDeadlineTest {
     private static void startTarpit(ServerSocket tarpit, AtomicReference<IOException> setupFailure) {
         Thread accepter = new Thread(() -> {
             try (Socket held = tarpit.accept(); OutputStream out = held.getOutputStream()) {
-                out.write(new byte[] {0x16, 0x03, 0x03, 0x40, 0x00});
+                out.write(new byte[]{0x16, 0x03, 0x03, 0x40, 0x00});
                 out.flush();
                 while (!Thread.currentThread().isInterrupted()) {
                     out.write(0);

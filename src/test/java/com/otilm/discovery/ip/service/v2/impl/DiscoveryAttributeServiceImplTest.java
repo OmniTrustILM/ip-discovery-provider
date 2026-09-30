@@ -4,32 +4,30 @@ import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.attribute.RequestAttributeV3;
 import com.otilm.api.model.client.connector.v2.attribute.AttributeCallbackRequestDto;
-import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
-import com.otilm.api.model.common.attribute.v3.content.BaseAttributeContentV3;
-import com.otilm.api.model.common.attribute.v3.content.IntegerAttributeContentV3;
-import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.BaseAttribute;
 import com.otilm.api.model.common.attribute.common.DataAttribute;
+import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
 import com.otilm.api.model.common.attribute.common.properties.DataAttributeProperties;
 import com.otilm.api.model.common.attribute.v3.DataAttributeV3;
+import com.otilm.api.model.common.attribute.v3.content.BaseAttributeContentV3;
+import com.otilm.api.model.common.attribute.v3.content.IntegerAttributeContentV3;
+import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.discovery.ip.api.v2.AttributeCallbackNotSupportedException;
 import com.otilm.discovery.ip.api.v2.AttributeDefinitionNotFoundException;
 import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.info.BuildProperties;
-
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 class DiscoveryAttributeServiceImplTest {
 
-    private final DiscoveryAttributeServiceImpl attributeService =
-            new DiscoveryAttributeServiceImpl(buildProperties());
+    private final DiscoveryAttributeServiceImpl attributeService = new DiscoveryAttributeServiceImpl(buildProperties());
 
     private static BuildProperties buildProperties() {
         Properties properties = new Properties();
@@ -146,11 +144,11 @@ class DiscoveryAttributeServiceImplTest {
     @Test
     void hostsIsRequiredAndPortsIsNot() {
         Assertions
-                .assertTrue(propertiesOf(definition(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_NAME))
-                        .isRequired());
+                .assertTrue(
+                        propertiesOf(definition(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_NAME)).isRequired());
         Assertions
-                .assertFalse(propertiesOf(definition(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_PORTS_NAME))
-                        .isRequired());
+                .assertFalse(
+                        propertiesOf(definition(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_PORTS_NAME)).isRequired());
     }
 
     // --- the registry ---
@@ -218,8 +216,7 @@ class DiscoveryAttributeServiceImplTest {
         request.setAttributeUuid(UUID.fromString(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_UUID));
         request.setAttributeName(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_NAME);
 
-        Assertions
-                .assertThrows(AttributeCallbackNotSupportedException.class, () -> attributeService.callback(request));
+        Assertions.assertThrows(AttributeCallbackNotSupportedException.class, () -> attributeService.callback(request));
     }
 
     /**
@@ -233,8 +230,7 @@ class DiscoveryAttributeServiceImplTest {
         request.setAttributeUuid(UUID.fromString("00000000-0000-0000-0000-000000000000"));
         request.setAttributeName("meta_somethingWeDroppedTwoVersionsAgo");
 
-        Assertions
-                .assertThrows(AttributeDefinitionNotFoundException.class, () -> attributeService.callback(request));
+        Assertions.assertThrows(AttributeDefinitionNotFoundException.class, () -> attributeService.callback(request));
     }
 
     // --- reading a run's values ---
@@ -252,13 +248,19 @@ class DiscoveryAttributeServiceImplTest {
     private static RequestAttribute hosts(String... entries) {
         return request(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_UUID,
                 DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_HOSTS_NAME, AttributeContentType.STRING,
-                java.util.Arrays.stream(entries).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new).toList());
+                java.util.Arrays
+                        .stream(entries)
+                        .<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new)
+                        .toList());
     }
 
     private static RequestAttribute ports(String... entries) {
         return request(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_PORTS_UUID,
                 DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_PORTS_NAME, AttributeContentType.STRING,
-                java.util.Arrays.stream(entries).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new).toList());
+                java.util.Arrays
+                        .stream(entries)
+                        .<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new)
+                        .toList());
     }
 
     private static RequestAttribute parallelism(int value) {
@@ -345,14 +347,12 @@ class DiscoveryAttributeServiceImplTest {
     @Test
     void refusesAParallelismOutsideThePublishedRange() {
         List<RequestAttribute> belowTheRange = List.of(parallelism(0));
-        List<RequestAttribute> aboveTheRange =
-                List.of(parallelism(DiscoveryAttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1));
+        List<RequestAttribute> aboveTheRange = List
+                .of(parallelism(DiscoveryAttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1));
 
         Assertions
-                .assertThrows(ValidationException.class,
-                        () -> attributeService.readParallelExecutions(belowTheRange));
+                .assertThrows(ValidationException.class, () -> attributeService.readParallelExecutions(belowTheRange));
         Assertions
-                .assertThrows(ValidationException.class,
-                        () -> attributeService.readParallelExecutions(aboveTheRange));
+                .assertThrows(ValidationException.class, () -> attributeService.readParallelExecutions(aboveTheRange));
     }
 }

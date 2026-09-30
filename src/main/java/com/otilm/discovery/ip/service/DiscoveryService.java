@@ -9,9 +9,10 @@ import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import java.io.IOException;
 
 public interface DiscoveryService {
-	public void discoverCertificate(DiscoveryRequestDto request, DiscoveryHistory history) throws IOException, NotFoundException;
+    public void discoverCertificate(DiscoveryRequestDto request, DiscoveryHistory history)
+            throws IOException, NotFoundException;
 
-	public DiscoveryProviderDto getProviderDtoData(DiscoveryDataRequestDto request, DiscoveryHistory history);
+    public DiscoveryProviderDto getProviderDtoData(DiscoveryDataRequestDto request, DiscoveryHistory history);
 
     void deleteDiscovery(String uuid) throws NotFoundException;
 }

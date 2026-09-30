@@ -1,7 +1,12 @@
 package com.otilm.discovery.ip;
 
-import com.otilm.api.exception.*;
+import com.otilm.api.exception.AlreadyExistException;
+import com.otilm.api.exception.NotDeletableException;
+import com.otilm.api.exception.NotFoundException;
+import com.otilm.api.exception.ValidationError;
+import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.common.ErrorMessageDto;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -9,8 +14,6 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import java.util.List;
 
 @RestControllerAdvice
 public class ExceptionHandlingAdvice {
@@ -64,9 +67,7 @@ public class ExceptionHandlingAdvice {
     public List<String> handleValidationException(ValidationException ex) {
         LOG.info("HTTP 422: {}", ex.getMessage());
 
-        return ex.getErrors().stream()
-                .map(ValidationError::getErrorDescription)
-                .toList();
+        return ex.getErrors().stream().map(ValidationError::getErrorDescription).toList();
     }
 
     /**
@@ -81,15 +82,15 @@ public class ExceptionHandlingAdvice {
         return ErrorMessageDto.getInstance(ex.getMessage());
     }
 
-//    /**
-//     * Handler for {@link AccessDeniedException}.
-//     */
-//    @ExceptionHandler(AccessDeniedException.class)
-//    public void handleAccessDeniedException(AccessDeniedException ex) {
-//        LOG.warn("Access denied: {}", ex.getMessage());
-//        // re-throw to let the Spring Security handle it
-//        throw ex;
-//    }
+    // /**
+    // * Handler for {@link AccessDeniedException}.
+    // */
+    // @ExceptionHandler(AccessDeniedException.class)
+    // public void handleAccessDeniedException(AccessDeniedException ex) {
+    // LOG.warn("Access denied: {}", ex.getMessage());
+    // // re-throw to let the Spring Security handle it
+    // throw ex;
+    // }
 
     /**
      * Handler for {@link Exception}.

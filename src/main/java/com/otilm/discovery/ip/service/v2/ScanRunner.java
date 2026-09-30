@@ -1,33 +1,29 @@
 package com.otilm.discovery.ip.service.v2;
 
-import com.otilm.api.model.connector.discovery.v2.DiscoveredCertificateDto;
-import com.otilm.api.model.connector.discovery.v2.DiscoveredItemDto;
-import com.otilm.api.model.connector.discovery.v2.DiscoveredKeyDto;
 import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.MetadataAttribute;
 import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
 import com.otilm.api.model.common.attribute.common.properties.MetadataAttributeProperties;
 import com.otilm.api.model.common.attribute.v3.MetadataAttributeV3;
 import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
+import com.otilm.api.model.connector.discovery.v2.DiscoveredCertificateDto;
+import com.otilm.api.model.connector.discovery.v2.DiscoveredItemDto;
+import com.otilm.api.model.connector.discovery.v2.DiscoveredKeyDto;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.KeyMapper;
 import com.otilm.discovery.ip.util.TargetEnumeration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HexFormat;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,14 +36,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * One run's scan: targets in chunks, results into the buffer, position into the handle.
  *
  * <p>
- * The cursor advances only at a chunk boundary, and a stop interrupts the chunk in flight rather than waiting for it.
- * A quiesce would have no bound to wait for — under backpressure the chunk proceeds at Core's drain cadence, or not
- * at all while the platform is unreachable, which is exactly the situation an operator reaches for stop in.
+ * The cursor advances only at a chunk boundary, and a stop interrupts the chunk in flight rather than waiting for it. A
+ * quiesce would have no bound to wait for — under backpressure the chunk proceeds at Core's drain cadence, or not at
+ * all while the platform is unreachable, which is exactly the situation an operator reaches for stop in.
  *
  * <p>
  * Resume therefore re-scans the interrupted chunk. That is contract-legal: the duplicates collapse on
@@ -78,9 +76,9 @@ public class ScanRunner {
      *
      * <p>
      * The checkpoint only advances at a boundary, and must: counting per target would double-count the interrupted
-     * chunk when a resumed run scans it again, letting a stop inflate its own run. Progress has no such obligation —
-     * it is advisory, recomputed on every read — so it reports the committed figure plus whatever this chunk has
-     * done, and moves on every poll instead of once per 256 targets.
+     * chunk when a resumed run scans it again, letting a stop inflate its own run. Progress has no such obligation — it
+     * is advisory, recomputed on every read — so it reports the committed figure plus whatever this chunk has done, and
+     * moves on every poll instead of once per 256 targets.
      */
     private final AtomicReference<ChunkTally> inFlightChunk = new AtomicReference<>();
 
@@ -138,8 +136,8 @@ public class ScanRunner {
 
     /**
      * A buffer bound that cannot be waited out ends the run, naming the limit. Counting it as one more failed target
-     * would be silent truncation: a legitimate dark sweep also reports millions of failed targets, so a
-     * buffer-starved run would be indistinguishable from one that simply found nothing listening.
+     * would be silent truncation: a legitimate dark sweep also reports millions of failed targets, so a buffer-starved
+     * run would be indistinguishable from one that simply found nothing listening.
      */
     private void raiseIfFatal() {
         RuntimeException limit = fatal.get();
@@ -267,8 +265,8 @@ public class ScanRunner {
      * Turns one scanned certificate into the items the run asked for.
      *
      * <p>
-     * Its own failure is kept apart from the probe's. Both end the target as failed, but only one is our defect,
-     * and a mapping that threw for every certificate otherwise looks like a range with nothing listening.
+     * Its own failure is kept apart from the probe's. Both end the target as failed, but only one is our defect, and a
+     * mapping that threw for every certificate otherwise looks like a range with nothing listening.
      */
     private void emit(X509Certificate certificate, String url, ChunkTally tally) throws InterruptedException {
         // Both items are built before either is published. Publishing the certificate and then failing to map the
@@ -323,8 +321,8 @@ public class ScanRunner {
     }
 
     /**
-     * The reasons this run's targets failed, commonest first, as "{@code 4094 x SSLHandshakeException}". Without
-     * it a range that is not listening, a TLS stack refusing a bare IP and a bug here all print the same number.
+     * The reasons this run's targets failed, commonest first, as "{@code 4094 x SSLHandshakeException}". Without it a
+     * range that is not listening, a TLS stack refusing a bare IP and a bug here all print the same number.
      */
     String failureSummary() {
         if (failureReasons.isEmpty()) {
@@ -333,7 +331,8 @@ public class ScanRunner {
         return ": " + failureReasons
                 .entrySet()
                 .stream()
-                .sorted(Map.Entry.<String, AtomicLong>comparingByValue(Comparator.comparingLong(AtomicLong::get))
+                .sorted(Map.Entry
+                        .<String, AtomicLong>comparingByValue(Comparator.comparingLong(AtomicLong::get))
                         .reversed())
                 .limit(TOP_FAILURE_REASONS)
                 .map(reason -> reason.getValue().get() + " x " + reason.getKey())
@@ -349,20 +348,19 @@ public class ScanRunner {
                 .forEach((reason, count) -> failureReasons
                         .computeIfAbsent(reason, key -> new AtomicLong())
                         .addAndGet(count.get()));
-        registry
-                .update(runId, handle -> {
-                    // A chunk finishing after a stop was recorded must not move the checkpoint: the stop has already
-                    // answered with one, and Core would be left holding a handle the connector had moved past.
-                    // Leaving the cursor where it was only costs re-scanning this chunk on resume.
-                    if (handle.state() == RunHandle.RunState.STOPPED) {
-                        return handle;
-                    }
-                    Map<String, Long> merged = new HashMap<>(handle.yieldByResource());
-                    tally.byResource.forEach((resource, count) -> merged.merge(resource, count.get(), Long::sum));
-                    return new RunHandle(handle.state(), cursor, buffer.highestSequence(), handle.targetsDigest(),
-                            handle.targetsProcessed() + tally.processed.get(),
-                            handle.targetsFailed() + tally.failed.get(), Map.copyOf(merged));
-                })
+        registry.update(runId, handle -> {
+            // A chunk finishing after a stop was recorded must not move the checkpoint: the stop has already
+            // answered with one, and Core would be left holding a handle the connector had moved past.
+            // Leaving the cursor where it was only costs re-scanning this chunk on resume.
+            if (handle.state() == RunHandle.RunState.STOPPED) {
+                return handle;
+            }
+            Map<String, Long> merged = new HashMap<>(handle.yieldByResource());
+            tally.byResource.forEach((resource, count) -> merged.merge(resource, count.get(), Long::sum));
+            return new RunHandle(handle.state(), cursor, buffer.highestSequence(), handle.targetsDigest(),
+                    handle.targetsProcessed() + tally.processed.get(), handle.targetsFailed() + tally.failed.get(),
+                    Map.copyOf(merged));
+        })
                 .ifPresent(committed -> logger
                         // Per chunk rather than per target: a wide sweep is otherwise silent for its whole duration.
                         .info("Run {} at {}/{} targets ({} failed{}), {} items held", runId, committed.cursorIndex(),
@@ -383,8 +381,8 @@ public class ScanRunner {
 
     /**
      * Where the item was found, which the contract asks for as typed metadata and v1 attached per certificate as
-     * discoverySource. Without it an operator has an inventory of certificates and no way to tell which host and
-     * port produced any of them.
+     * discoverySource. Without it an operator has an inventory of certificates and no way to tell which host and port
+     * produced any of them.
      */
     private static List<MetadataAttribute> sourceOf(String url) {
         MetadataAttributeV3 attribute = new MetadataAttributeV3();
@@ -420,8 +418,7 @@ public class ScanRunner {
      * The key a certificate already carries. Its uniqueRef is the fingerprint, which is what the platform correlates
      * staged keys on, so the same key seen on two hosts collapses to one item rather than two.
      */
-    private static DiscoveredItemDto keyItem(X509Certificate certificate, String url)
-            throws NoSuchAlgorithmException {
+    private static DiscoveredItemDto keyItem(X509Certificate certificate, String url) throws NoSuchAlgorithmException {
         DiscoveredKeyDto payload = KeyMapper.toKey(certificate);
 
         DiscoveredItemDto item = new DiscoveredItemDto();
@@ -433,8 +430,8 @@ public class ScanRunner {
     }
 
     /**
-     * Everything an item carries besides its payload: reference, timestamp, resource, source metadata and JSON
-     * quoting. Measured against a serialised item and rounded up, since the error has to fall on the safe side.
+     * Everything an item carries besides its payload: reference, timestamp, resource, source metadata and JSON quoting.
+     * Measured against a serialised item and rounded up, since the error has to fall on the safe side.
      */
     private static final long ENVELOPE_BYTES = 1_024;
 

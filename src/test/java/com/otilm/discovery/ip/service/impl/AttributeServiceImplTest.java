@@ -7,22 +7,21 @@ import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.BaseAttribute;
 import com.otilm.api.model.common.attribute.common.DataAttribute;
 import com.otilm.api.model.common.attribute.common.constraint.RangeAttributeConstraint;
-import com.otilm.api.model.common.attribute.v2.InfoAttributeV2;
 import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
+import com.otilm.api.model.common.attribute.v2.InfoAttributeV2;
 import com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2;
 import com.otilm.api.model.common.attribute.v2.content.BooleanAttributeContentV2;
 import com.otilm.api.model.common.attribute.v2.content.IntegerAttributeContentV2;
 import com.otilm.api.model.common.attribute.v2.content.StringAttributeContentV2;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 /**
- * The attribute service is stateless, so it is exercised directly rather than through a Spring
- * context. AttributeServiceTest covers the wiring; this covers the definitions and validation.
+ * The attribute service is stateless, so it is exercised directly rather than through a Spring context.
+ * AttributeServiceTest covers the wiring; this covers the definitions and validation.
  */
 class AttributeServiceImplTest {
 
@@ -57,8 +56,8 @@ class AttributeServiceImplTest {
 
     private static RequestAttributeV2 parallelExecutions(int value) {
         return attribute("1517c7a5-34cb-4f94-a0aa-1e9fe5b5b277",
-                AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME,
-                AttributeContentType.INTEGER, new IntegerAttributeContentV2(value));
+                AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME, AttributeContentType.INTEGER,
+                new IntegerAttributeContentV2(value));
     }
 
     // --- getAttributes ---
@@ -68,13 +67,15 @@ class AttributeServiceImplTest {
         List<BaseAttribute> attributes = attributeService.getAttributes(KIND);
 
         Assertions.assertEquals(5, attributes.size());
-        Assertions.assertEquals(
-                List.of(AttributeServiceImpl.INFO_ATTRIBUTE_IP_HOSTNAME_NAME,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_DISCOVERY_IP_NAME,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_PORT_NAME,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_ALL_PORTS_NAME,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME),
-                attributes.stream().map(BaseAttribute::getName).toList());
+        Assertions
+                .assertEquals(
+                        List
+                                .of(AttributeServiceImpl.INFO_ATTRIBUTE_IP_HOSTNAME_NAME,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_DISCOVERY_IP_NAME,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_PORT_NAME,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_ALL_PORTS_NAME,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME),
+                        attributes.stream().map(BaseAttribute::getName).toList());
     }
 
     @Test
@@ -82,8 +83,11 @@ class AttributeServiceImplTest {
         List<BaseAttribute> attributes = attributeService.getAttributes(KIND);
 
         Assertions.assertEquals(AttributeType.INFO, attributes.get(0).getType());
-        Assertions.assertTrue(attributes.subList(1, attributes.size()).stream()
-                .allMatch(a -> a.getType() == AttributeType.DATA));
+        Assertions
+                .assertTrue(attributes
+                        .subList(1, attributes.size())
+                        .stream()
+                        .allMatch(a -> a.getType() == AttributeType.DATA));
     }
 
     @Test
@@ -91,13 +95,15 @@ class AttributeServiceImplTest {
         // These uuids identify stored attribute content, so a change breaks existing discoveries.
         List<BaseAttribute> attributes = attributeService.getAttributes(KIND);
 
-        Assertions.assertEquals(
-                List.of(AttributeServiceImpl.INFO_ATTRIBUTE_IP_HOSTNAME_UUID,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_DISCOVERY_IP_UUID,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_PORT_UUID,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_ALL_PORTS_UUID,
-                        AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_UUID),
-                attributes.stream().map(BaseAttribute::getUuid).toList());
+        Assertions
+                .assertEquals(
+                        List
+                                .of(AttributeServiceImpl.INFO_ATTRIBUTE_IP_HOSTNAME_UUID,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_DISCOVERY_IP_UUID,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_PORT_UUID,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_ALL_PORTS_UUID,
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_UUID),
+                        attributes.stream().map(BaseAttribute::getUuid).toList());
     }
 
     @Test
@@ -119,7 +125,8 @@ class AttributeServiceImplTest {
     void rejectsAnUnsupportedKindOnValidation() {
         List<RequestAttribute> attributes = new ArrayList<>(List.of(ip("10.0.0.1")));
 
-        Assertions.assertThrows(ValidationException.class, () -> attributeService.validateAttributes("Nope", attributes));
+        Assertions
+                .assertThrows(ValidationException.class, () -> attributeService.validateAttributes("Nope", attributes));
     }
 
     @Test
@@ -151,16 +158,18 @@ class AttributeServiceImplTest {
 
     @Test
     void readsTheIpValueBack() {
-        Assertions.assertEquals("10.0.0.1",
-                AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(List.of(ip("10.0.0.1"))));
+        Assertions
+                .assertEquals("10.0.0.1",
+                        AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(List.of(ip("10.0.0.1"))));
     }
 
     @Test
     void failsWhenTheIpAttributeIsAbsent() {
         List<RequestAttribute> withoutIp = List.of(port("443"));
 
-        Assertions.assertThrows(ValidationException.class,
-                () -> AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(withoutIp));
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> AttributeServiceImpl.getDiscoveryIpDataAttributeContentValue(withoutIp));
     }
 
     @Test
@@ -175,26 +184,30 @@ class AttributeServiceImplTest {
 
     @Test
     void readsTheAllPortsFlagBack() {
-        Assertions.assertEquals(Boolean.TRUE,
-                AttributeServiceImpl.getAllPortsDataAttributeContentValue(List.of(allPorts(true))));
+        Assertions
+                .assertEquals(Boolean.TRUE,
+                        AttributeServiceImpl.getAllPortsDataAttributeContentValue(List.of(allPorts(true))));
     }
 
     @Test
     void fallsBackToFalseWhenAllPortsIsAbsent() {
-        Assertions.assertEquals(Boolean.FALSE,
-                AttributeServiceImpl.getAllPortsDataAttributeContentValue(List.of(ip("10.0.0.1"))));
+        Assertions
+                .assertEquals(Boolean.FALSE,
+                        AttributeServiceImpl.getAllPortsDataAttributeContentValue(List.of(ip("10.0.0.1"))));
     }
 
     @Test
     void readsTheParallelExecutionsValueBack() {
-        Assertions.assertEquals(25,
-                AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(List.of(parallelExecutions(25))));
+        Assertions
+                .assertEquals(25, AttributeServiceImpl
+                        .getParallelExecutionsDataAttributeContentValue(List.of(parallelExecutions(25))));
     }
 
     @Test
     void fallsBackToSingleThreadedWhenParallelExecutionsIsAbsent() {
-        Assertions.assertEquals(1,
-                AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(List.of(ip("10.0.0.1"))));
+        Assertions
+                .assertEquals(1,
+                        AttributeServiceImpl.getParallelExecutionsDataAttributeContentValue(List.of(ip("10.0.0.1"))));
     }
 
     @Test
@@ -208,12 +221,16 @@ class AttributeServiceImplTest {
     }
 
     /**
-     * Zero is the value that matters: the scan batches until it holds this many probes, so a batch that can never
-     * fill submits every target at once.
+     * Zero is the value that matters: the scan batches until it holds this many probes, so a batch that can never fill
+     * submits every target at once.
      */
     @Test
     void rejectsAParallelismTheScanCannotHonour() {
-        for (Integer rejected : new Integer[] {null, 0, -1, AttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1,
+        for (Integer rejected : new Integer[]{
+                null,
+                0,
+                -1,
+                AttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1,
                 Integer.MAX_VALUE}) {
             Assertions
                     .assertThrows(ValidationException.class,
@@ -233,8 +250,8 @@ class AttributeServiceImplTest {
 
     /**
      * Guidance that names a maximum the connector would refuse is worse than none. The help and the constraint are
-     * asserted against each other rather than against a literal, so the next change to the bound cannot leave the
-     * prose behind.
+     * asserted against each other rather than against a literal, so the next change to the bound cannot leave the prose
+     * behind.
      */
     @Test
     void quotesTheSameParallelismMaximumInTheHelpTextAsTheConstraintEnforces() {

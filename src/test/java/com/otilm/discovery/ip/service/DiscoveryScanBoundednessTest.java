@@ -11,6 +11,11 @@ import com.otilm.api.model.connector.discovery.DiscoveryRequestDto;
 import com.otilm.api.model.core.discovery.DiscoveryStatus;
 import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
+import java.io.IOException;
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,12 +23,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
-
-import java.io.IOException;
-import java.time.Duration;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
 
@@ -91,9 +90,8 @@ class DiscoveryScanBoundednessTest {
 
         Assertions.assertEquals(TARGET_COUNT, connectionService.completed.get(), "every target should be probed");
         Assertions
-                .assertTrue(connectionService.peakInFlight.get() <= PARALLEL_EXECUTIONS,
-                        "peak in-flight probes was " + connectionService.peakInFlight.get() + ", above the configured "
-                                + PARALLEL_EXECUTIONS);
+                .assertTrue(connectionService.peakInFlight.get() <= PARALLEL_EXECUTIONS, "peak in-flight probes was "
+                        + connectionService.peakInFlight.get() + ", above the configured " + PARALLEL_EXECUTIONS);
     }
 
     private DiscoveryRequestDto scanRequest(String name, int parallelExecutions) {

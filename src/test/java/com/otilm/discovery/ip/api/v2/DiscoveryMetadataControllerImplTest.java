@@ -4,19 +4,18 @@ import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.connector.discovery.v2.DiscoverySupportedResourceDto;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
-import org.springframework.boot.info.BuildProperties;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 class DiscoveryMetadataControllerImplTest {
 
-    private final DiscoveryMetadataControllerImpl controller =
-            new DiscoveryMetadataControllerImpl(new DiscoveryAttributeServiceImpl(buildProperties()));
+    private final DiscoveryMetadataControllerImpl controller = new DiscoveryMetadataControllerImpl(
+            new DiscoveryAttributeServiceImpl(buildProperties()));
 
     private static BuildProperties buildProperties() {
         Properties properties = new Properties();

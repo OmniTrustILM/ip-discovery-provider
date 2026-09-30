@@ -1,15 +1,14 @@
 package com.otilm.discovery.ip.service.v2;
 
 import com.otilm.api.model.connector.discovery.v2.DiscoveredItemDto;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * One run's undrained results, and the sequencer that numbers them.
@@ -39,8 +38,8 @@ public class ResultBuffer {
     private final AtomicLong sequencer;
 
     /**
-     * The highest cursor any drain has acknowledged. Items at or below it are the connector's to discard. Seeded
-     * from the resumed run's sequence space: everything up to the checkpoint was handed over before the stop.
+     * The highest cursor any drain has acknowledged. Items at or below it are the connector's to discard. Seeded from
+     * the resumed run's sequence space: everything up to the checkpoint was handed over before the stop.
      */
     private final AtomicLong discardWatermark;
 
@@ -48,9 +47,9 @@ public class ResultBuffer {
     private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
 
     /**
-     * Held across the closed check and the publication, and across the close that invalidates them. Checking the
-     * flag and then putting as two steps leaves a window where a close lands between, and the item is published
-     * into a map that has just been cleared.
+     * Held across the closed check and the publication, and across the close that invalidates them. Checking the flag
+     * and then putting as two steps leaves a window where a close lands between, and the item is published into a map
+     * that has just been cleared.
      */
     private final Object publication = new Object();
 
@@ -59,7 +58,7 @@ public class ResultBuffer {
 
     /**
      * @param startingSequence the resumed run's {@code sequenceHighWater}; a resumed run continues its sequence space
-     *                         and never restarts it, or Core's cursor filter drops every re-emitted item
+     * and never restarts it, or Core's cursor filter drops every re-emitted item
      */
     public ResultBuffer(UUID runId, BufferBudget budget, long startingSequence) {
         this.runId = runId;
@@ -69,8 +68,8 @@ public class ResultBuffer {
     }
 
     /**
-     * Numbers an item and holds it, blocking while the buffer is full. The weight is supplied by the producer,
-     * which has just built the payload.
+     * Numbers an item and holds it, blocking while the buffer is full. The weight is supplied by the producer, which
+     * has just built the payload.
      *
      * @return the sequence assigned
      * @throws InterruptedException if the scan is stopped while blocked, which is how a stop reaches a parked probe
@@ -93,21 +92,21 @@ public class ResultBuffer {
      * The items strictly above {@code afterSequence}, in sequence order.
      *
      * <p>
-     * Only a contiguous run of published sequences is served, and the page's {@code highestSequence} is the end of
-     * that run rather than the sequencer's value.
+     * Only a contiguous run of published sequences is served, and the page's {@code highestSequence} is the end of that
+     * run rather than the sequencer's value.
      *
      * <p>
-     * A cursor below the discard watermark is answered empty rather than refused. Core never sends a regressed
-     * cursor, but arrival order is not send order: a redelivered drain or one stuck past Core's budget arrives late,
-     * which is transport, not a defect. What must never happen is serving items as though they followed the stale
-     * cursor — Core advances its cursor to the highest sequence in a page, so that would complete a run with the
-     * items in between missing.
+     * A cursor below the discard watermark is answered empty rather than refused. Core never sends a regressed cursor,
+     * but arrival order is not send order: a redelivered drain or one stuck past Core's budget arrives late, which is
+     * transport, not a defect. What must never happen is serving items as though they followed the stale cursor — Core
+     * advances its cursor to the highest sequence in a page, so that would complete a run with the items in between
+     * missing.
      */
     public Page page(long afterSequence, int maxItems, long maxBytes) {
         if (afterSequence < discardWatermark.get()) {
             logger
-                    .info("Run {} drained at cursor {}, below the discard watermark {}; answering an empty page",
-                            runId, afterSequence, discardWatermark.get());
+                    .info("Run {} drained at cursor {}, below the discard watermark {}; answering an empty page", runId,
+                            afterSequence, discardWatermark.get());
             // The watermark, not the sequencer, which would let Core advance past items still held here.
             return new Page(List.of(), discardWatermark.get(), !items.isEmpty());
         }
@@ -126,9 +125,9 @@ public class ResultBuffer {
             }
             if (page.isEmpty() && entry.getValue().bytes() > maxBytes) {
                 // An empty page with more=true would have Core retry this cursor forever.
-                throw new BufferBudget.BufferLimitExceededException("Run " + runId + " holds an item of "
-                        + entry.getValue().bytes() + " bytes at sequence " + entry.getKey()
-                        + ", which exceeds the " + maxBytes + " bytes a page can carry");
+                throw new BufferBudget.BufferLimitExceededException(
+                        "Run " + runId + " holds an item of " + entry.getValue().bytes() + " bytes at sequence "
+                                + entry.getKey() + ", which exceeds the " + maxBytes + " bytes a page can carry");
             }
             if (page.size() >= maxItems || bytes + entry.getValue().bytes() > maxBytes) {
                 more = true;

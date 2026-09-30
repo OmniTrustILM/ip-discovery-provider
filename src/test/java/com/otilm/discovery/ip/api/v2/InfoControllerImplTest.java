@@ -3,15 +3,14 @@ package com.otilm.discovery.ip.api.v2;
 import com.otilm.api.model.client.connector.v2.ConnectorInterface;
 import com.otilm.api.model.client.connector.v2.ConnectorInterfaceInfo;
 import com.otilm.api.model.client.connector.v2.FeatureFlag;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.info.BuildProperties;
-
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 class InfoControllerImplTest {
 
@@ -52,28 +51,25 @@ class InfoControllerImplTest {
         Set<ConnectorInterface> advertised = advertised();
 
         Assertions
-                .assertTrue(
-                        advertised
-                                .containsAll(EnumSet.of(ConnectorInterface.INFO, ConnectorInterface.HEALTH,
-                                        ConnectorInterface.METRICS)),
+                .assertTrue(advertised
+                        .containsAll(EnumSet
+                                .of(ConnectorInterface.INFO, ConnectorInterface.HEALTH, ConnectorInterface.METRICS)),
                         "Core rejects a connector missing any mandatory interface; advertised: " + advertised);
     }
 
     @Test
     void advertisesAFunctionalInterface() {
         Assertions
-                .assertTrue(
-                        advertised()
-                                .stream()
-                                .anyMatch(code -> code
-                                        .getCategory() == ConnectorInterface.InterfaceCategory.FUNCTIONAL),
+                .assertTrue(advertised()
+                        .stream()
+                        .anyMatch(code -> code.getCategory() == ConnectorInterface.InterfaceCategory.FUNCTIONAL),
                         "Core rejects a connector that implements only common interfaces");
     }
 
     /**
-     * The metrics API is versioned independently of the connector interface hosting it: {@code MetricsController}
-     * maps to {@code /v1/metrics} and its {@code METRICS_CONFIG} carries {@code version=1}, while info and health map
-     * to {@code /v2/*}. Declaring metrics as v2 would name an endpoint this connector does not serve.
+     * The metrics API is versioned independently of the connector interface hosting it: {@code MetricsController} maps
+     * to {@code /v1/metrics} and its {@code METRICS_CONFIG} carries {@code version=1}, while info and health map to
+     * {@code /v2/*}. Declaring metrics as v2 would name an endpoint this connector does not serve.
      */
     @Test
     void declaresMetricsAtTheMetricsApiOwnVersion() {
@@ -102,8 +98,7 @@ class InfoControllerImplTest {
 
     /**
      * Stop and resume are advertised because a stopped run survives the connector restarting: the scan is
-     * interruptible, the checkpoint travels in the run's meta, and a run this node no longer holds is rebuilt from
-     * it.
+     * interruptible, the checkpoint travels in the run's meta, and a run this node no longer holds is rebuilt from it.
      */
     @Test
     void advertisesStopAndResume() {

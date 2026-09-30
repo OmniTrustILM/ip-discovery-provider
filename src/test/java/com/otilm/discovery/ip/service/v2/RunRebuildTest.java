@@ -17,11 +17,6 @@ import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
 import com.otilm.discovery.ip.util.TargetEnumeration;
-import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.info.BuildProperties;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
@@ -30,6 +25,10 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 /**
  * A restart loses the runs this node was holding. Core keeps driving a stopped one for the whole resume window, so a
@@ -38,8 +37,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>
  * Rebuilding is therefore necessary and also the most dangerous thing here, because the failure it risks completes
- * <em>successfully</em>: Core advances its cursor to the highest sequence in a page rather than the end of a
- * contiguous run, so a rebuilt run that served across a hole would let the run finish clean with items missing.
+ * <em>successfully</em>: Core advances its cursor to the highest sequence in a page rather than the end of a contiguous
+ * run, so a rebuilt run that served across a hole would let the run finish clean with items missing.
  */
 class RunRebuildTest {
 
@@ -49,8 +48,7 @@ class RunRebuildTest {
     private final RunRegistry registry = new RunRegistry();
     private final BufferBudget budget = new BufferBudget(4, 100_000, 1L << 30, 1L << 31, 30_000);
     private final CountingProbes probes = new CountingProbes();
-    private final DiscoveryRunService service =
-            new DiscoveryRunService(registry, budget, attributeService(), probes);
+    private final DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), probes);
 
     private static DiscoveryAttributeServiceImpl attributeService() {
         Properties properties = new Properties();
@@ -78,8 +76,8 @@ class RunRebuildTest {
         attribute.setName(name);
         attribute.setContentType(AttributeContentType.STRING);
         attribute
-                .setContent(Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new)
-                        .toList());
+                .setContent(
+                        Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new).toList());
         return attribute;
     }
 
@@ -161,8 +159,8 @@ class RunRebuildTest {
 
     /**
      * A running handle describes a run whose in-flight state is genuinely gone. Rebuilding on it is silent loss: an
-     * initiate-time handle reads cursor 0 and high water 0, indistinguishable from a stopped run checkpointed before
-     * it scanned anything, so the rebuilt run renumbers from 1 while Core's cursor sits at N.
+     * initiate-time handle reads cursor 0 and high water 0, indistinguishable from a stopped run checkpointed before it
+     * scanned anything, so the rebuilt run renumbers from 1 while Core's cursor sits at N.
      */
     @Test
     void refusesToRebuildARunningHandle() {
@@ -202,8 +200,8 @@ class RunRebuildTest {
     // --- resume ---
 
     /**
-     * Resume carries no cursor, so it is accepted and the first drain gives the verdict — which arrives within
-     * seconds, because Core expedites the drain row on a successful resume.
+     * Resume carries no cursor, so it is accepted and the first drain gives the verdict — which arrives within seconds,
+     * because Core expedites the drain row on a successful resume.
      */
     @Test
     void resumesARebuiltRunFromItsCursorAndKeepsItsSequenceSpace() {

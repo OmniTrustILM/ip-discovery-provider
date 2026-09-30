@@ -15,16 +15,6 @@ import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
 import com.otilm.discovery.ip.util.TargetEnumeration;
-import org.awaitility.Awaitility;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.info.BuildProperties;
-
-import javax.security.auth.x500.X500Principal;
 import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -39,11 +29,20 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.security.auth.x500.X500Principal;
+import org.awaitility.Awaitility;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 /**
- * The seam where the checkpoint, the buffer and the scan meet. Three call sites — stop, resume and rebuild — each
- * have to leave the same invariant standing: the checkpoint's high water equals the buffer's sequencer whenever Core
- * can observe either. When they disagree the run does not fail; it completes, with items missing.
+ * The seam where the checkpoint, the buffer and the scan meet. Three call sites — stop, resume and rebuild — each have
+ * to leave the same invariant standing: the checkpoint's high water equals the buffer's sequencer whenever Core can
+ * observe either. When they disagree the run does not fail; it completes, with items missing.
  */
 class StopResumeSeamTest {
 
@@ -65,7 +64,7 @@ class StopResumeSeamTest {
                 .getCertificate(new JcaX509v3CertificateBuilder(subject, BigInteger.ONE,
                         Date.from(Instant.now().minus(Duration.ofDays(1))),
                         Date.from(Instant.now().plus(Duration.ofDays(1))), subject, pair.getPublic())
-                                .build(new JcaContentSignerBuilder("SHA256withRSA").build(pair.getPrivate())));
+                        .build(new JcaContentSignerBuilder("SHA256withRSA").build(pair.getPrivate())));
     }
 
     private static DiscoveryAttributeServiceImpl attributeService() {
@@ -96,7 +95,7 @@ class StopResumeSeamTest {
                     Thread.currentThread().interrupt();
                 }
             }
-            return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {certificate});
+            return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[]{certificate});
         }
     }
 
@@ -106,8 +105,8 @@ class StopResumeSeamTest {
         attribute.setName(name);
         attribute.setContentType(AttributeContentType.STRING);
         attribute
-                .setContent(Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new)
-                        .toList());
+                .setContent(
+                        Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new).toList());
         return attribute;
     }
 
@@ -134,8 +133,7 @@ class StopResumeSeamTest {
         request.setAttributes(scanAttributes());
         if (meta != null) {
             @SuppressWarnings("unchecked")
-            List<com.otilm.api.model.common.attribute.common.MetadataAttribute> typed =
-                    (List<com.otilm.api.model.common.attribute.common.MetadataAttribute>) meta;
+            List<com.otilm.api.model.common.attribute.common.MetadataAttribute> typed = (List<com.otilm.api.model.common.attribute.common.MetadataAttribute>) meta;
             request.setCheckpoint(typed);
         }
         return request;
@@ -148,8 +146,7 @@ class StopResumeSeamTest {
         request.setAttributes(scanAttributes());
         if (meta != null) {
             @SuppressWarnings("unchecked")
-            List<com.otilm.api.model.common.attribute.common.MetadataAttribute> typed =
-                    (List<com.otilm.api.model.common.attribute.common.MetadataAttribute>) meta;
+            List<com.otilm.api.model.common.attribute.common.MetadataAttribute> typed = (List<com.otilm.api.model.common.attribute.common.MetadataAttribute>) meta;
             request.setCheckpoint(typed);
         }
         request.setAfterSequence(afterSequence);
