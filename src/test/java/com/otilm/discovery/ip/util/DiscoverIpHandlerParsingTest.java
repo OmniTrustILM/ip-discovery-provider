@@ -9,18 +9,17 @@ import com.otilm.api.model.common.attribute.v2.content.BooleanAttributeContentV2
 import com.otilm.api.model.common.attribute.v2.content.StringAttributeContentV2;
 import com.otilm.api.model.connector.discovery.DiscoveryRequestDto;
 import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 /**
- * Covers the URL-expansion logic directly, without a Spring context. The existing
- * DiscoverIpHandlerTest asserts the validation regexes; this one drives the parsing itself.
+ * Covers the URL-expansion logic directly, without a Spring context. The existing DiscoverIpHandlerTest asserts the
+ * validation regexes; this one drives the parsing itself.
  */
 class DiscoverIpHandlerParsingTest {
 
@@ -38,13 +37,18 @@ class DiscoverIpHandlerParsingTest {
         DiscoveryRequestDto request = new DiscoveryRequestDto();
         request.setName("parsing-test");
         request.setKind("IP-Hostname");
-        request.setAttributes(List.<RequestAttribute>of(
-                attribute("1b6c48ad-c1c7-4c82-91ef-3b61bc9f52ac", AttributeServiceImpl.DATA_ATTRIBUTE_DISCOVERY_IP_NAME,
-                        AttributeContentType.STRING, new StringAttributeContentV2(ips)),
-                attribute("a9091e0d-f9b9-4514-b275-1dd52aa870ec", AttributeServiceImpl.DATA_ATTRIBUTE_PORT_NAME,
-                        AttributeContentType.STRING, new StringAttributeContentV2(ports)),
-                attribute("3c70d728-e8c3-40f9-b9b2-5d7256f89ef0", AttributeServiceImpl.DATA_ATTRIBUTE_ALL_PORTS_NAME,
-                        AttributeContentType.BOOLEAN, new BooleanAttributeContentV2(allPorts))));
+        request
+                .setAttributes(List
+                        .<RequestAttribute>of(
+                                attribute("1b6c48ad-c1c7-4c82-91ef-3b61bc9f52ac",
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_DISCOVERY_IP_NAME,
+                                        AttributeContentType.STRING, new StringAttributeContentV2(ips)),
+                                attribute("a9091e0d-f9b9-4514-b275-1dd52aa870ec",
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_PORT_NAME, AttributeContentType.STRING,
+                                        new StringAttributeContentV2(ports)),
+                                attribute("3c70d728-e8c3-40f9-b9b2-5d7256f89ef0",
+                                        AttributeServiceImpl.DATA_ATTRIBUTE_ALL_PORTS_NAME,
+                                        AttributeContentType.BOOLEAN, new BooleanAttributeContentV2(allPorts))));
         return request;
     }
 
@@ -82,8 +86,8 @@ class DiscoverIpHandlerParsingTest {
 
     @Test
     void rejectsAMalformedEntry() {
-        ValidationException thrown = Assertions.assertThrows(ValidationException.class,
-                () -> DiscoverIpHandler.getIpHostnameUrls("192.33.168.1.1"));
+        ValidationException thrown = Assertions
+                .assertThrows(ValidationException.class, () -> DiscoverIpHandler.getIpHostnameUrls("192.33.168.1.1"));
 
         Assertions.assertTrue(thrown.getMessage().contains("192.33.168.1.1"), thrown.getMessage());
     }
@@ -154,9 +158,11 @@ class DiscoverIpHandlerParsingTest {
     void buildsTheCartesianProductOfHostsAndPorts() {
         Set<String> urls = DiscoverIpHandler.buildUrls(Set.of("10.0.0.1", "10.0.0.2"), Set.of("443", "8443"));
 
-        Assertions.assertEquals(Set.of(
-                "https://10.0.0.1:443", "https://10.0.0.1:8443",
-                "https://10.0.0.2:443", "https://10.0.0.2:8443"), urls);
+        Assertions
+                .assertEquals(Set
+                        .of("https://10.0.0.1:443", "https://10.0.0.1:8443", "https://10.0.0.2:443",
+                                "https://10.0.0.2:8443"),
+                        urls);
     }
 
     @Test
@@ -175,9 +181,11 @@ class DiscoverIpHandlerParsingTest {
             urls.add(targets.target(i));
         }
 
-        Assertions.assertEquals(Set.of(
-                "https://10.9.9.1:443", "https://10.9.9.1:8443",
-                "https://10.9.9.2:443", "https://10.9.9.2:8443"), urls);
+        Assertions
+                .assertEquals(Set
+                        .of("https://10.9.9.1:443", "https://10.9.9.1:8443", "https://10.9.9.2:443",
+                                "https://10.9.9.2:8443"),
+                        urls);
     }
 
     @Test
@@ -193,8 +201,8 @@ class DiscoverIpHandlerParsingTest {
         Constructor<DiscoverIpHandler> constructor = DiscoverIpHandler.class.getDeclaredConstructor();
         constructor.setAccessible(true);
 
-        InvocationTargetException thrown =
-                Assertions.assertThrows(InvocationTargetException.class, constructor::newInstance);
+        InvocationTargetException thrown = Assertions
+                .assertThrows(InvocationTargetException.class, constructor::newInstance);
         Assertions.assertInstanceOf(IllegalStateException.class, thrown.getCause());
     }
 }

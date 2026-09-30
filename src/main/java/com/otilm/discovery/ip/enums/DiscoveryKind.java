@@ -26,16 +26,14 @@ public enum DiscoveryKind {
     }
 
     public static DiscoveryKind findByCode(String code) {
-        return Arrays.stream(VALUES)
+        return Arrays
+                .stream(VALUES)
                 .filter(k -> k.code.equals(code))
                 .findFirst()
-                .orElseThrow(() ->
-                        new ValidationException(ValidationError.create("Unknown kind code {}", code)));
+                .orElseThrow(() -> new ValidationException(ValidationError.create("Unknown kind code {}", code)));
     }
 
     public static List<String> getKinds() {
-        return Arrays.stream(VALUES)
-                .map(DiscoveryKind::getCode)
-                .toList();
+        return Arrays.stream(VALUES).map(DiscoveryKind::getCode).toList();
     }
 }

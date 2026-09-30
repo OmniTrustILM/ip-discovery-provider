@@ -14,11 +14,6 @@ import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
 import com.otilm.discovery.ip.util.TargetEnumeration;
-import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.info.BuildProperties;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
@@ -28,13 +23,17 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 /**
  * Progress has to move between chunk boundaries.
  *
  * <p>
- * The checkpoint advances only at a boundary, and must — counting per target would double-count the interrupted
- * chunk when a resumed run scans it again, letting a stop inflate its own run's completion. But a wide sweep at low
+ * The checkpoint advances only at a boundary, and must — counting per target would double-count the interrupted chunk
+ * when a resumed run scans it again, letting a stop inflate its own run's completion. But a wide sweep at low
  * parallelism puts those boundaries minutes apart: a {@code /20} at the default parallelism of one is roughly twenty
  * minutes and sixteen boundaries, sampled by Core every five minutes. Reporting the checkpoint alone leaves a working
  * run looking frozen.
@@ -84,8 +83,8 @@ class LiveProgressTest {
         attribute.setName(name);
         attribute.setContentType(AttributeContentType.STRING);
         attribute
-                .setContent(Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new)
-                        .toList());
+                .setContent(
+                        Arrays.stream(values).<BaseAttributeContentV3<?>>map(StringAttributeContentV3::new).toList());
         return attribute;
     }
 

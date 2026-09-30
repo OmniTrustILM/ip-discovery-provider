@@ -1,19 +1,18 @@
 package com.otilm.discovery.ip.api;
 
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springdoc.core.converters.SchemaPropertyDeprecatingConverter;
 
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * v1 stays deprecated but fully working while both surfaces serve, so the marking is the whole deliverable and it has
- * to be the marking OpenAPI actually reads. springdoc treats an operation as deprecated when either the handler
- * method or its declaring class carries the annotation, which is why the classes are annotated and the methods are
- * not; this asserts that predicate directly, since no springdoc web starter is on the classpath to serve a document
- * to inspect instead.
+ * to be the marking OpenAPI actually reads. springdoc treats an operation as deprecated when either the handler method
+ * or its declaring class carries the annotation, which is why the classes are annotated and the methods are not; this
+ * asserts that predicate directly, since no springdoc web starter is on the classpath to serve a document to inspect
+ * instead.
  */
 // The v1 controllers are @Deprecated(forRemoval = true) and naming them is the assertion, so the warning about
 // calling them is inverted here.

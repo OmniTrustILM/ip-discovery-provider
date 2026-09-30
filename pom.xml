@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>com.otilm</groupId>
 		<artifactId>dependencies</artifactId>
-		<version>1.4.2</version>
+		<version>1.4.3-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>ip-discovery-provider</artifactId>
@@ -17,16 +17,6 @@
 
 	<properties>
 		<java.version>21</java.version>
-		<!-- CVE-2026-8763 (CRITICAL) and CVE-2026-13506 (HIGH) in Bouncy Castle 1.84.
-		     Remove when the parent BOM manages at least this version. -->
-		<bouncycastle.version>1.85</bouncycastle.version>
-		<!-- CVE-2026-75595 (CRITICAL): SNI routing bypass via a fragmented TLS ClientHello.
-		     Remove when the parent BOM manages at least this version. -->
-		<netty.version>4.1.137.Final</netty.version>
-		<!-- CVE-2026-65182, CVE-2026-65905, CVE-2026-68525 (auth/constraint bypasses in embedded Tomcat).
-		     The announced fix version 10.1.58 was never published; 10.1.59 is its released successor.
-		     Remove when the parent BOM manages at least this version. -->
-		<tomcat.version>10.1.59</tomcat.version>
 		<ipaddress.version>5.6.2</ipaddress.version>
 		<sonar.organization>ilm</sonar.organization>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
@@ -194,6 +184,28 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
+			</plugin>
+
+			<!-- Flyway Java migrations report the checksum recorded in JavaMigrationChecksums, and
+			     DatabaseMigrationTest holds that value to the migration's source text. A shipped migration is a
+			     contract with every database that ran it, not ordinary source, so both gates skip them. -->
+			<plugin>
+				<groupId>com.diffplug.spotless</groupId>
+				<artifactId>spotless-maven-plugin</artifactId>
+				<configuration>
+					<java>
+						<excludes>
+							<exclude>src/main/java/db/migration/**/*.java</exclude>
+						</excludes>
+					</java>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-checkstyle-plugin</artifactId>
+				<configuration>
+					<excludes>db/migration/**/*.java</excludes>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

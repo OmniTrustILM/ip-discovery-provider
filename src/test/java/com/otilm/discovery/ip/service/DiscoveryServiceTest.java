@@ -10,6 +10,9 @@ import com.otilm.api.model.connector.discovery.DiscoveryRequestDto;
 import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
 import jakarta.transaction.Transactional;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,10 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.ActiveProfiles;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
 
 @SpringBootTest
 @Transactional
@@ -75,8 +74,9 @@ public class DiscoveryServiceTest {
     }
 
     @Test
-    public void getProviderDtoDataTest(){
-        Assertions.assertAll(() -> discoveryService.getProviderDtoData(discoveryProviderDtoTestExists, discoveryHistory));
+    public void getProviderDtoDataTest() {
+        Assertions
+                .assertAll(() -> discoveryService.getProviderDtoData(discoveryProviderDtoTestExists, discoveryHistory));
     }
 
     @Test

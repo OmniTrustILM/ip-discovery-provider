@@ -5,6 +5,7 @@ import com.otilm.api.interfaces.connector.AttributesController;
 import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.common.attribute.common.BaseAttribute;
 import com.otilm.discovery.ip.service.AttributeService;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,13 +14,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /**
  * @deprecated by {@code DiscoveryMetadataControllerImpl}, which serves the same schema at
- *             {@code /v2/discoveryProvider/attributes} without a kind, and validates a run's attributes at initiate
- *             rather than through a call of its own. Both surfaces serve until the platform-level sunset, so this one
- *             keeps working unchanged.
+ * {@code /v2/discoveryProvider/attributes} without a kind, and validates a run's attributes at initiate rather than
+ * through a call of its own. Both surfaces serve until the platform-level sunset, so this one keeps working unchanged.
  */
 @Deprecated(since = "2.20.0", forRemoval = true)
 @RestController
@@ -40,9 +38,9 @@ public class AttributesControllerImpl implements AttributesController {
         return attributeService.getAttributes(kind);
     }
 
-
     @Override
-    public void validateAttributes(@PathVariable String kind, @RequestBody List<RequestAttribute> attributes) throws ValidationException {
+    public void validateAttributes(@PathVariable String kind, @RequestBody List<RequestAttribute> attributes)
+            throws ValidationException {
         attributeService.validateAttributes(kind, attributes);
     }
 

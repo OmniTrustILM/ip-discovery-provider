@@ -1,11 +1,6 @@
 package com.otilm.discovery.ip.service.v2;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -14,12 +9,15 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 class RunRegistryTest {
 
@@ -49,8 +47,8 @@ class RunRegistryTest {
     }
 
     /**
-     * A miss is not an error here. A stopped run holds nothing on this node — it is rebuilt from its replayed handle
-     * on whichever replica the call reaches — so the registry reports absence and lets the caller decide.
+     * A miss is not an error here. A stopped run holds nothing on this node — it is rebuilt from its replayed handle on
+     * whichever replica the call reaches — so the registry reports absence and lets the caller decide.
      */
     @Test
     void reportsAnUnknownRunAsAbsent() {
@@ -81,8 +79,8 @@ class RunRegistryTest {
     }
 
     /**
-     * The scan advances the cursor while a lifecycle call may be stopping the run, so the update has to be one step.
-     * A get-then-put would lose increments under exactly this interleaving.
+     * The scan advances the cursor while a lifecycle call may be stopping the run, so the update has to be one step. A
+     * get-then-put would lose increments under exactly this interleaving.
      */
     @Test
     void losesNoConcurrentAdvanceOfTheCursor() throws Exception {
@@ -94,10 +92,8 @@ class RunRegistryTest {
             List<Callable<Object>> work = IntStream
                     .range(0, advances)
                     .<Callable<Object>>mapToObj(i -> () -> registry
-                            .update(runId,
-                                    h -> new RunHandle(h.state(), h.cursorIndex() + 1, h.sequenceHighWater(),
-                                            h.targetsDigest(), h.targetsProcessed(), h.targetsFailed(),
-                                            h.yieldByResource())))
+                            .update(runId, h -> new RunHandle(h.state(), h.cursorIndex() + 1, h.sequenceHighWater(),
+                                    h.targetsDigest(), h.targetsProcessed(), h.targetsFailed(), h.yieldByResource())))
                     .toList();
             executor.invokeAll(work);
         }
@@ -162,9 +158,9 @@ class RunRegistryTest {
         RunRegistry tickedRegistry = new RunRegistry(ticker);
         UUID runId = UUID.randomUUID();
         tickedRegistry.register(runId, handle(0));
-        ScanRunner runner = new ScanRunner(runId, com.otilm.discovery.ip.util.TargetEnumeration
-                .of("10.0.0.1", "443", false), null, tickedRegistry, null, 1,
-                java.util.Set.of(com.otilm.api.model.core.auth.Resource.CERTIFICATE));
+        ScanRunner runner = new ScanRunner(runId,
+                com.otilm.discovery.ip.util.TargetEnumeration.of("10.0.0.1", "443", false), null, tickedRegistry, null,
+                1, java.util.Set.of(com.otilm.api.model.core.auth.Resource.CERTIFICATE));
         tickedRegistry.attach(runId, runner, null);
 
         ticker.advance(Duration.ofHours(1));
@@ -185,8 +181,8 @@ class RunRegistryTest {
     }
 
     /**
-     * Abandoning has to hand the buffer's budget back. Without it the node keeps charging a run that no longer
-     * exists, and refuses new ones long after it holds any.
+     * Abandoning has to hand the buffer's budget back. Without it the node keeps charging a run that no longer exists,
+     * and refuses new ones long after it holds any.
      */
     @Test
     void handsBackTheBudgetOfAnAbandonedRun() {
@@ -228,8 +224,8 @@ class RunRegistryTest {
     }
 
     /**
-     * The transition is the lock. Two resumes both reading STOPPED and both starting a scan would put two
-     * sequencers on one run, so only the caller that performs the move may act on it.
+     * The transition is the lock. Two resumes both reading STOPPED and both starting a scan would put two sequencers on
+     * one run, so only the caller that performs the move may act on it.
      */
     @Test
     void transitionsOnlyFromTheStateTheCallerBelievedItWasIn() {
@@ -237,17 +233,13 @@ class RunRegistryTest {
         registry.register(runId, handle(0));
         registry.setState(runId, DiscoveryRunState.STOPPED);
 
+        Assertions.assertTrue(registry.compareAndSetState(runId, DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING));
         Assertions
-                .assertTrue(registry
-                        .compareAndSetState(runId, DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING));
-        Assertions
-                .assertFalse(
-                        registry.compareAndSetState(runId, DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING),
+                .assertFalse(registry.compareAndSetState(runId, DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING),
                         "the second caller lost the race and must not also start a scan");
         Assertions
                 .assertFalse(registry
-                        .compareAndSetState(UUID.randomUUID(), DiscoveryRunState.STOPPED,
-                                DiscoveryRunState.RUNNING),
+                        .compareAndSetState(UUID.randomUUID(), DiscoveryRunState.STOPPED, DiscoveryRunState.RUNNING),
                         "a run this node does not hold cannot be transitioned");
     }
 
@@ -326,8 +318,8 @@ class RunRegistryTest {
     // --- the rebuild verdict ---
 
     /**
-     * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by
-     * either would otherwise have every later drain served with no cursor check at all.
+     * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by either
+     * would otherwise have every later drain served with no cursor check at all.
      */
     @Test
     void carriesTheRebuildVerdictUntilADrainSettlesIt() {
@@ -348,8 +340,8 @@ class RunRegistryTest {
     // --- release ---
 
     /**
-     * A cancel and the deadline both come through here, and a run that is gone must leave nothing charged: the slot
-     * it held is what the next run is refused for.
+     * A cancel and the deadline both come through here, and a run that is gone must leave nothing charged: the slot it
+     * held is what the next run is refused for.
      */
     @Test
     void releaseHandsBackEverythingTheRunHeld() {
@@ -404,11 +396,10 @@ class RunRegistryTest {
         Assertions.assertTrue(tickedRegistry.find(runId).isPresent(), "a run driven just now is not idle");
     }
 
-
     /**
-     * A release landing between register and attach leaves the caller holding a runner and a buffer the registry
-     * will never see. Told it lost, the caller can close them; told nothing, it submits a scan that runs untracked
-     * and keeps one of the node's run slots for good.
+     * A release landing between register and attach leaves the caller holding a runner and a buffer the registry will
+     * never see. Told it lost, the caller can close them; told nothing, it submits a scan that runs untracked and keeps
+     * one of the node's run slots for good.
      */
     @Test
     void reportsWhenAnAttachmentLostToARelease() {
@@ -442,7 +433,6 @@ class RunRegistryTest {
                         "a runner is attached, so its scan is still on its way");
     }
 
-
     /** A buffer whose close parks, so a test can look at the registry while a release is inside it. */
     private static final class ParkedClose extends ResultBuffer {
         private final CountDownLatch closing = new CountDownLatch(1);
@@ -465,9 +455,9 @@ class RunRegistryTest {
     }
 
     /**
-     * A run must not read as gone until what it held is closed. Removed first and closed after, an initiate or a
-     * resume in between admits the same runId into the old slot, and the old close then frees the new run's slot:
-     * its first item fails as holding no budget, and the node runs over its cap meanwhile.
+     * A run must not read as gone until what it held is closed. Removed first and closed after, an initiate or a resume
+     * in between admits the same runId into the old slot, and the old close then frees the new run's slot: its first
+     * item fails as holding no budget, and the node runs over its cap meanwhile.
      */
     @Test
     void keepsAReleasedRunVisibleUntilItsBufferHasClosed() throws Exception {
@@ -499,7 +489,8 @@ class RunRegistryTest {
         Thread reaper = Thread.ofVirtual().start(() -> tickedRegistry.abandonIdle(Duration.ofMinutes(30)));
         Assertions.assertTrue(buffer.closing.await(5, TimeUnit.SECONDS));
 
-        Assertions.assertTrue(tickedRegistry.find(runId).isPresent(), "still closing, so the run must not read as gone");
+        Assertions
+                .assertTrue(tickedRegistry.find(runId).isPresent(), "still closing, so the run must not read as gone");
         buffer.proceed.countDown();
         reaper.join(Duration.ofSeconds(5));
         Assertions.assertTrue(tickedRegistry.find(runId).isEmpty());

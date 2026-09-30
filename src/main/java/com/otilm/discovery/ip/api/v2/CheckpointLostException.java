@@ -9,8 +9,8 @@ import java.util.UUID;
  *
  * <p>
  * Distinct from a run the connector never knew: this run is recognised, and its checkpoint is refused rather than
- * resumed at the wrong offset. A connector upgrade therefore breaks stopped runs loudly instead of quietly scanning
- * the wrong targets.
+ * resumed at the wrong offset. A connector upgrade therefore breaks stopped runs loudly instead of quietly scanning the
+ * wrong targets.
  */
 public class CheckpointLostException extends RuntimeException {
 

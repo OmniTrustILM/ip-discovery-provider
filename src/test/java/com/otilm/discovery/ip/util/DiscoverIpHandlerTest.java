@@ -2,12 +2,11 @@ package com.otilm.discovery.ip.util;
 
 import com.otilm.api.exception.ValidationException;
 import com.otilm.discovery.ip.service.impl.AttributeServiceImpl;
+import java.util.Set;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-
-import java.util.Set;
-import java.util.regex.Pattern;
 
 @SpringBootTest
 public class DiscoverIpHandlerTest {
@@ -17,7 +16,7 @@ public class DiscoverIpHandlerTest {
         String startIp = "10.1.1.30";
         String endIp = "10.1.1.100";
 
-        Set<String> ips =  DiscoverIpHandler.getIpRange(startIp, endIp);
+        Set<String> ips = DiscoverIpHandler.getIpRange(startIp, endIp);
 
         Assertions.assertNotNull(ips);
         Assertions.assertEquals(ips.size(), 71);
@@ -43,23 +42,38 @@ public class DiscoverIpHandlerTest {
     @Test
     public void testCombinedRegexValidation_ok() {
         String ipsHostnames = "www.example.com,192.168.1.1,10.1.1.20-10.1.1.50,172.16.1.0/24,172.16.1.0/24";
-        boolean match =Pattern.compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX).matcher(ipsHostnames).matches();
+        boolean match = Pattern
+                .compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX)
+                .matcher(ipsHostnames)
+                .matches();
         Assertions.assertTrue(match);
 
         ipsHostnames = "www.example.com";
-        match =Pattern.compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX).matcher(ipsHostnames).matches();
+        match = Pattern
+                .compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX)
+                .matcher(ipsHostnames)
+                .matches();
         Assertions.assertTrue(match);
 
         ipsHostnames = "192.168.1.1";
-        match =Pattern.compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX).matcher(ipsHostnames).matches();
+        match = Pattern
+                .compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX)
+                .matcher(ipsHostnames)
+                .matches();
         Assertions.assertTrue(match);
 
         ipsHostnames = "10.1.1.20-10.1.1.50";
-        match =Pattern.compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX).matcher(ipsHostnames).matches();
+        match = Pattern
+                .compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX)
+                .matcher(ipsHostnames)
+                .matches();
         Assertions.assertTrue(match);
 
         ipsHostnames = "172.16.1.0/24";
-        match =Pattern.compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX).matcher(ipsHostnames).matches();
+        match = Pattern
+                .compile(AttributeServiceImpl.COMBINED_IP_HOSTNAME_VALIDATION_REGEX)
+                .matcher(ipsHostnames)
+                .matches();
         Assertions.assertTrue(match);
     }
 

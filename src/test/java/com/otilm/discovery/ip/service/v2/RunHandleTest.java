@@ -7,14 +7,13 @@ import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
 import com.otilm.api.model.common.attribute.v3.MetadataAttributeV3;
 import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.core.util.AttributeDefinitionUtils;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 class RunHandleTest {
 
@@ -60,17 +59,17 @@ class RunHandleTest {
     }
 
     /**
-     * Measured the way Core measures it — the serialized attribute list, not the raw JSON — because the envelope is
-     * far more verbose than its content and the cap applies to the envelope.
+     * Measured the way Core measures it — the serialized attribute list, not the raw JSON — because the envelope is far
+     * more verbose than its content and the cap applies to the envelope.
      */
     @Test
     void staysFarInsideTheMetaCapWhenMeasuredAsCoreMeasuresIt() {
         String serialized = AttributeDefinitionUtils.serialize(handle().encode());
         int bytes = serialized.getBytes(StandardCharsets.UTF_8).length;
 
-        Assertions.assertTrue(bytes < MAX_META_BYTES / 10,
-                "the checkpoint should be an order of magnitude inside the " + MAX_META_BYTES + " byte cap, was "
-                        + bytes);
+        Assertions
+                .assertTrue(bytes < MAX_META_BYTES / 10, "the checkpoint should be an order of magnitude inside the "
+                        + MAX_META_BYTES + " byte cap, was " + bytes);
     }
 
     /**
@@ -150,8 +149,8 @@ class RunHandleTest {
     // --- what identifies the checkpoint, and what it has to mean ---
 
     /**
-     * The UUID is what identifies an attribute definition. Core carries metadata of its own, and one of it sharing
-     * this name would otherwise be read as the checkpoint and fail a run that was recoverable.
+     * The UUID is what identifies an attribute definition. Core carries metadata of its own, and one of it sharing this
+     * name would otherwise be read as the checkpoint and fail a run that was recoverable.
      */
     @Test
     void ignoresAForeignAttributeWearingTheCheckpointsName() {
@@ -191,10 +190,12 @@ class RunHandleTest {
      */
     @Test
     void refusesACheckpointThatParsesButCannotBeTrue() {
-        Assertions.assertThrows(ValidationException.class, () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":-1,"
-                + "\"sequenceHighWater\":0,\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}"));
-        Assertions.assertThrows(ValidationException.class, () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":0,"
-                + "\"sequenceHighWater\":-5,\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}"));
+        Assertions
+                .assertThrows(ValidationException.class, () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":-1,"
+                        + "\"sequenceHighWater\":0,\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}"));
+        Assertions
+                .assertThrows(ValidationException.class, () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":0,"
+                        + "\"sequenceHighWater\":-5,\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}"));
         Assertions
                 .assertThrows(ValidationException.class,
                         () -> decode("{\"cursorIndex\":0,\"sequenceHighWater\":0,\"targetsDigest\":\"d\"}"),
@@ -238,7 +239,6 @@ class RunHandleTest {
     private static RunHandle decode(String json) {
         return RunHandle.from(List.of(checkpointOf(json))).orElseThrow();
     }
-
 
     /** The content list is Object-typed, so a foreign shape must fail as validation rather than as a raw cast. */
     @Test

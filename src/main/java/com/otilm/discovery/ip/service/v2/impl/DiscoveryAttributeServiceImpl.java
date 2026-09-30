@@ -1,10 +1,10 @@
 package com.otilm.discovery.ip.service.v2.impl;
 
+import com.otilm.api.exception.ValidationException;
+import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.connector.v2.attribute.AttributeCallbackRequestDto;
 import com.otilm.api.model.client.connector.v2.attribute.AttributeCallbackResponseDto;
-import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.connector.v2.attribute.AttributeDefinitionsDto;
-import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.BaseAttribute;
 import com.otilm.api.model.common.attribute.common.constraint.BaseAttributeConstraint;
@@ -18,18 +18,17 @@ import com.otilm.api.model.common.attribute.v3.InfoAttributeV3;
 import com.otilm.api.model.common.attribute.v3.content.IntegerAttributeContentV3;
 import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.api.model.common.attribute.v3.content.TextAttributeContentV3;
+import com.otilm.core.util.AttributeDefinitionUtils;
 import com.otilm.discovery.ip.api.v2.AttributeCallbackNotSupportedException;
 import com.otilm.discovery.ip.api.v2.AttributeDefinitionNotFoundException;
 import com.otilm.discovery.ip.service.v2.DiscoveryAttributeService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
-import com.otilm.core.util.AttributeDefinitionUtils;
-import org.springframework.boot.info.BuildProperties;
-import org.springframework.stereotype.Service;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.boot.info.BuildProperties;
+import org.springframework.stereotype.Service;
 
 @Service
 public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService {
@@ -53,9 +52,9 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
     public static final String DEFAULT_PORT = "443";
 
     /**
-     * Offered, never enforced. Core stores an extensible list without its content precisely so the UI can show these
-     * as suggestions, so revising them needs no definition migration, and an entry outside them is accepted, or the
-     * list would be a closed one wearing the wrong flag.
+     * Offered, never enforced. Core stores an extensible list without its content precisely so the UI can show these as
+     * suggestions, so revising them needs no definition migration, and an entry outside them is accepted, or the list
+     * would be a closed one wearing the wrong flag.
      */
     private static final List<String> SUGGESTED_PORTS = List.of("443", "8443", "1-1024", "1-65535");
 
@@ -118,8 +117,9 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
         if (entries.isEmpty()) {
             throw new ValidationException("At least one host is required");
         }
-        entries.forEach(entry -> checked(DATA_ATTRIBUTE_HOSTS_NAME, entry,
-                () -> TargetEnumeration.validateHostSpec(entry)));
+        entries
+                .forEach(entry -> checked(DATA_ATTRIBUTE_HOSTS_NAME, entry,
+                        () -> TargetEnumeration.validateHostSpec(entry)));
         return entries;
     }
 
@@ -129,8 +129,9 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
         if (entries.isEmpty()) {
             return List.of(DEFAULT_PORT);
         }
-        entries.forEach(entry -> checked(DATA_ATTRIBUTE_PORTS_NAME, entry,
-                () -> TargetEnumeration.validatePortSpec(entry, false)));
+        entries
+                .forEach(entry -> checked(DATA_ATTRIBUTE_PORTS_NAME, entry,
+                        () -> TargetEnumeration.validatePortSpec(entry, false)));
         return entries;
     }
 
@@ -238,8 +239,8 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
     }
 
     /**
-     * Not a list, so its content is what a list cannot carry: a real default, which Core stores with the definition
-     * and the form comes up holding.
+     * Not a list, so its content is what a list cannot carry: a real default, which Core stores with the definition and
+     * the form comes up holding.
      */
     private static DataAttributeV3 parallelExecutions() {
         DataAttributeV3 attribute = new DataAttributeV3();
@@ -264,8 +265,9 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
         RangeAttributeConstraint constraint = new RangeAttributeConstraint();
         constraint.setData(range);
         constraint.setDescription("Allowed values for parallel executions");
-        constraint.setErrorMessage("Invalid value for parallel executions, it can be between "
-                + PARALLEL_EXECUTIONS_MIN + " and " + PARALLEL_EXECUTIONS_MAX);
+        constraint
+                .setErrorMessage("Invalid value for parallel executions, it can be between " + PARALLEL_EXECUTIONS_MIN
+                        + " and " + PARALLEL_EXECUTIONS_MAX);
         attribute.setConstraints(List.<BaseAttributeConstraint<?>>of(constraint));
 
         return attribute;
@@ -273,8 +275,8 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
 
     /**
      * A list an operator can extend. All three properties travel together: Core refuses {@code multiSelect} or
-     * {@code extensibleList} on an attribute that is not a list, and without {@code extensibleList} the content
-     * becomes the only permitted values, which for hosts and ports cannot be enumerated in advance.
+     * {@code extensibleList} on an attribute that is not a list, and without {@code extensibleList} the content becomes
+     * the only permitted values, which for hosts and ports cannot be enumerated in advance.
      */
     private static DataAttributeV3 openList(String uuid, String name, String label) {
         DataAttributeV3 attribute = new DataAttributeV3();

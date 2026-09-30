@@ -1,23 +1,22 @@
 package com.otilm.discovery.ip.service;
 
 import com.otilm.discovery.ip.dto.ConnectionResponse;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.time.Duration;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-public class ConnectionServiceTest{
+public class ConnectionServiceTest {
 
     @Autowired
     private ConnectionService connectionService;
@@ -59,10 +58,8 @@ public class ConnectionServiceTest{
 
             String url = "https://127.0.0.1:" + stalling.getLocalPort();
             Assertions
-                    .assertTimeoutPreemptively(Duration.ofSeconds(10),
-                            () -> Assertions
-                                    .assertThrows(SocketTimeoutException.class,
-                                            () -> connectionService.getCertificates(url)),
+                    .assertTimeoutPreemptively(Duration.ofSeconds(10), () -> Assertions
+                            .assertThrows(SocketTimeoutException.class, () -> connectionService.getCertificates(url)),
                             "the probe did not give up on a stalling target");
         }
     }

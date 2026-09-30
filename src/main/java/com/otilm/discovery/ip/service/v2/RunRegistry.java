@@ -1,10 +1,6 @@
 package com.otilm.discovery.ip.service.v2;
 
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +18,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.IntStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 /**
  * The runs this node is tracking, keyed by the {@code runId} Core assigns: runs it is scanning, runs stopped here or
@@ -45,15 +44,17 @@ public class RunRegistry {
 
     /**
      * Striped rather than one per run: the lock has to exist before the run does, because initiate and a rebuilding
-     * resume take it first, and a per-run lock removed with its run can be handed out twice. Runs sharing a stripe
-     * only take turns.
+     * resume take it first, and a per-run lock removed with its run can be handed out twice. Runs sharing a stripe only
+     * take turns.
      *
      * <p>
      * A {@link ReentrantLock} rather than a monitor because stop holds it while its scan settles, for up to ten
      * seconds, and on JDK 21 a virtual thread blocked on or inside a monitor pins its carrier.
      */
-    private final ReentrantLock[] lifecycle =
-            IntStream.range(0, 1024).mapToObj(i -> new ReentrantLock()).toArray(ReentrantLock[]::new);
+    private final ReentrantLock[] lifecycle = IntStream
+            .range(0, 1024)
+            .mapToObj(i -> new ReentrantLock())
+            .toArray(ReentrantLock[]::new);
 
     @org.springframework.beans.factory.annotation.Autowired
     public RunRegistry() {
@@ -74,12 +75,11 @@ public class RunRegistry {
         private final AtomicLong targetsTotal = new AtomicLong();
         private final AtomicReference<Future<?>> scan = new AtomicReference<>();
         /** Set when a runner is attached, so a wait can tell "no scan yet" from "no scan at all". */
-        private final java.util.concurrent.atomic.AtomicBoolean scanExpected =
-                new java.util.concurrent.atomic.AtomicBoolean();
+        private final java.util.concurrent.atomic.AtomicBoolean scanExpected = new java.util.concurrent.atomic.AtomicBoolean();
         /**
          * Set when a run is rebuilt from a replayed checkpoint, and cleared by the first drain that proves Core is
-         * exactly at it. {@link #NOTHING_OWED} means none is owed -- not zero, which is the high water of a run
-         * rebuilt before it produced anything, and precisely the run whose cursor most needs checking.
+         * exactly at it. {@link #NOTHING_OWED} means none is owed -- not zero, which is the high water of a run rebuilt
+         * before it produced anything, and precisely the run whose cursor most needs checking.
          */
         private final AtomicLong drainVerificationOwedAt = new AtomicLong(NOTHING_OWED);
 
@@ -109,9 +109,9 @@ public class RunRegistry {
      * Publishes a rebuilt run complete, in one step.
      *
      * <p>
-     * Registered empty and filled afterwards, it is briefly visible as a running run owing no cursor check — the
-     * check that stops a rebuilt run serving across a hole. A concurrent resume can also create a buffer in that
-     * gap, which the filling call would overwrite.
+     * Registered empty and filled afterwards, it is briefly visible as a running run owing no cursor check — the check
+     * that stops a rebuilt run serving across a hole. A concurrent resume can also create a buffer in that gap, which
+     * the filling call would overwrite.
      *
      * @return false if the run is already registered, which the caller answers from the entry that is already there
      */
@@ -131,7 +131,7 @@ public class RunRegistry {
      * refuses new runs long after it has any.
      *
      * @return false if the run was released while this attachment was being prepared, in which case the caller owns
-     *         what it built and has to close it -- otherwise the scan runs untracked and its budget slot is lost
+     * what it built and has to close it -- otherwise the scan runs untracked and its budget slot is lost
      */
     public boolean attach(UUID runId, ScanRunner runner, ResultBuffer buffer) {
         return runs.computeIfPresent(runId, (key, entry) -> {
@@ -148,13 +148,13 @@ public class RunRegistry {
 
     /**
      * Records that the platform is still driving this run. Every lifecycle call does this, which is what makes the
-     * deadline measure neglect rather than duration — a wall-clock limit would kill a legitimate long scan, and a
-     * limit on scan time alone would misfire during a Core outage in the opposite direction.
+     * deadline measure neglect rather than duration — a wall-clock limit would kill a legitimate long scan, and a limit
+     * on scan time alone would misfire during a Core outage in the opposite direction.
      *
      * <p>
-     * Through {@code computeIfPresent} so it is serialised against the reaper, which decides and removes inside its
-     * own computation on this key; a bare update can land after the reaper has read the timestamp and before it
-     * returns, and the run is then torn down while it is being driven.
+     * Through {@code computeIfPresent} so it is serialised against the reaper, which decides and removes inside its own
+     * computation on this key; a bare update can land after the reaper has read the timestamp and before it returns,
+     * and the run is then torn down while it is being driven.
      */
     public void touch(UUID runId) {
         runs.computeIfPresent(runId, (key, entry) -> {
@@ -195,8 +195,8 @@ public class RunRegistry {
     }
 
     /**
-     * The size of the run's enumeration, exact from the moment it is known. Absent rather than zero when it is not:
-     * a total of nought would read as a finished run rather than an unknown one.
+     * The size of the run's enumeration, exact from the moment it is known. Absent rather than zero when it is not: a
+     * total of nought would read as a finished run rather than an unknown one.
      */
     public Optional<Long> targetsTotal(UUID runId) {
         Entry entry = runs.get(runId);
@@ -267,8 +267,8 @@ public class RunRegistry {
      * Records that this run was rebuilt and may not serve items until a drain arrives at exactly {@code highWater}.
      *
      * <p>
-     * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by
-     * either would otherwise have every later drain served with no cursor check at all.
+     * The verdict cannot live in the rebuild call alone: status and resume rebuild too, and a run registered by either
+     * would otherwise have every later drain served with no cursor check at all.
      */
     public void oweDrainVerification(UUID runId, long highWater) {
         Entry entry = runs.get(runId);
@@ -332,9 +332,9 @@ public class RunRegistry {
      *
      * <p>
      * Closed inside the map's own computation on this key, so a run reads as gone only once what it held is closed.
-     * Removed first and closed after, an initiate or a resume in between admits the same runId into the old slot,
-     * and the old close then frees the new run's slot. The work under the bin is short: interrupting futures, a
-     * monitor held only for a put, and a budget lock never held while waiting, none of which calls back in here.
+     * Removed first and closed after, an initiate or a resume in between admits the same runId into the old slot, and
+     * the old close then frees the new run's slot. The work under the bin is short: interrupting futures, a monitor
+     * held only for a put, and a budget lock never held while waiting, none of which calls back in here.
      */
     public boolean release(UUID runId) {
         boolean[] released = new boolean[1];

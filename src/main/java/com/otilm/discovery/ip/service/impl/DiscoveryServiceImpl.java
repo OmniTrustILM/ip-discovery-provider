@@ -3,11 +3,11 @@ package com.otilm.discovery.ip.service.impl;
 import com.otilm.api.exception.NotFoundException;
 import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.MetadataAttribute;
-import com.otilm.api.model.common.attribute.v2.MetadataAttributeV2;
 import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
+import com.otilm.api.model.common.attribute.common.properties.MetadataAttributeProperties;
+import com.otilm.api.model.common.attribute.v2.MetadataAttributeV2;
 import com.otilm.api.model.common.attribute.v2.content.IntegerAttributeContentV2;
 import com.otilm.api.model.common.attribute.v2.content.StringAttributeContentV2;
-import com.otilm.api.model.common.attribute.common.properties.MetadataAttributeProperties;
 import com.otilm.api.model.connector.discovery.DiscoveryDataRequestDto;
 import com.otilm.api.model.connector.discovery.DiscoveryProviderDto;
 import com.otilm.api.model.connector.discovery.DiscoveryRequestDto;
@@ -22,6 +22,23 @@ import com.otilm.discovery.ip.service.DiscoveryHistoryService;
 import com.otilm.discovery.ip.service.DiscoveryService;
 import com.otilm.discovery.ip.util.DiscoverIpHandler;
 import com.otilm.discovery.ip.util.TargetEnumeration;
+import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,18 +49,6 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.io.IOException;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.X509Certificate;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 @Transactional
@@ -83,8 +88,15 @@ public class DiscoveryServiceImpl implements DiscoveryService {
             dto.setCertificateData(new ArrayList<>());
             dto.setTotalCertificatesDiscovered(0);
         } else {
-            Pageable page = PageRequest.of(request.getPageNumber() <= 0 ? 0 : request.getPageNumber() - 1, request.getItemsPerPage(), Sort.by(Sort.Direction.ASC, "id"));
-            dto.setCertificateData(certificateRepository.findAllByDiscoveryId(history.getId(), page).stream().map(Certificate::mapToDto).toList());
+            Pageable page = PageRequest
+                    .of(request.getPageNumber() <= 0 ? 0 : request.getPageNumber() - 1, request.getItemsPerPage(),
+                            Sort.by(Sort.Direction.ASC, "id"));
+            dto
+                    .setCertificateData(certificateRepository
+                            .findAllByDiscoveryId(history.getId(), page)
+                            .stream()
+                            .map(Certificate::mapToDto)
+                            .toList());
         }
         return dto;
     }
@@ -157,9 +169,14 @@ public class DiscoveryServiceImpl implements DiscoveryService {
                 Thread.currentThread().interrupt();
             }
         } finally {
-            logger.info("Discovery {} has total of {} certificates, {} unique, from {} sources", request.getName(), foundCertsCount.get(), uniqueCerts.size(), targets.size());
+            logger
+                    .info("Discovery {} has total of {} certificates, {} unique, from {} sources", request.getName(),
+                            foundCertsCount.get(), uniqueCerts.size(), targets.size());
             history.setStatus(failed ? DiscoveryStatus.FAILED : DiscoveryStatus.COMPLETED);
-            history.setMeta(AttributeDefinitionUtils.serialize(getDiscoveryMetadata(targets.size(), successUrlCount.get(), failedUrlCount.get())));
+            history
+                    .setMeta(AttributeDefinitionUtils
+                            .serialize(
+                                    getDiscoveryMetadata(targets.size(), successUrlCount.get(), failedUrlCount.get())));
             discoveryHistoryService.setHistory(history);
             logger.info("Discovery Completed. Name of the discovery is {}", request.getName());
         }
@@ -172,7 +189,8 @@ public class DiscoveryServiceImpl implements DiscoveryService {
      * This wait is the scan's only backpressure: targets are enumerated by index rather than materialised, so nothing
      * else bounds submission and a large range would otherwise hand millions of tasks to the executor at once.
      */
-    private void awaitBatch(List<Future<?>> futures, String discoveryName) throws ExecutionException, InterruptedException {
+    private void awaitBatch(List<Future<?>> futures, String discoveryName)
+            throws ExecutionException, InterruptedException {
         logger.debug("Waiting for {} URL discovery tasks for discovery {}", futures.size(), discoveryName);
         for (Future<?> future : futures) {
             future.get();
@@ -181,7 +199,9 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         futures.clear();
     }
 
-    private void processCertificatesForUrl(String url, Long historyId, Set<String> uniqueCerts, AtomicLong foundCertsCount) throws IOException, NoSuchAlgorithmException, KeyManagementException, CertificateEncodingException {
+    private void processCertificatesForUrl(String url, Long historyId, Set<String> uniqueCerts,
+            AtomicLong foundCertsCount)
+            throws IOException, NoSuchAlgorithmException, KeyManagementException, CertificateEncodingException {
         ConnectionResponse connection = connectionService.getCertificates(url);
         logger.debug("Connection to the url success. Certificates obtained");
         X509Certificate[] certificates = connection.getCertificates();
@@ -194,7 +214,8 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         }
     }
 
-    private void createCertificateEntry(X509Certificate certificate, Long discoveryId, String discoverySource) throws CertificateEncodingException {
+    private void createCertificateEntry(X509Certificate certificate, Long discoveryId, String discoverySource)
+            throws CertificateEncodingException {
         Certificate cert = new Certificate();
         String base64Content = Base64.getEncoder().encodeToString(certificate.getEncoded());
         if (certificateRepository.findByDiscoveryIdAndBase64Content(discoveryId, base64Content).isEmpty()) {
@@ -209,7 +230,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     private List<MetadataAttributeV2> getDiscoveryMetadata(long totalUrls, long successUrls, long failedUrls) {
         List<MetadataAttributeV2> attributes = new ArrayList<>();
 
-        //Total URL
+        // Total URL
         MetadataAttributeV2 totalAttribute = new MetadataAttributeV2();
         totalAttribute.setName("totalUrls");
         totalAttribute.setUuid("872ca286-601f-11ed-9b6a-0242ac120002");
@@ -225,7 +246,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         totalAttribute.setContent(reportableCount(totalUrls));
         attributes.add(totalAttribute);
 
-        //Success URL
+        // Success URL
         MetadataAttributeV2 successAttribute = new MetadataAttributeV2();
         successAttribute.setName("successUrls");
         successAttribute.setUuid("872ca600-601f-11ed-9b6a-0242ac120002");
@@ -241,7 +262,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
         successAttribute.setContent(reportableCount(successUrls));
         attributes.add(successAttribute);
 
-        //Failed URL
+        // Failed URL
         MetadataAttributeV2 failedAttribute = new MetadataAttributeV2();
         failedAttribute.setName("failedUrls");
         failedAttribute.setUuid("872ca7ea-601f-11ed-9b6a-0242ac120002");
@@ -262,8 +283,8 @@ public class DiscoveryServiceImpl implements DiscoveryService {
 
     /**
      * These counts are longs -- a /16 on all ports is 4.29 billion targets -- but the attributes have been INTEGER
-     * since v1 and their type is part of that wire shape, so the numeric value is clamped while the reference keeps
-     * the exact figure.
+     * since v1 and their type is part of that wire shape, so the numeric value is clamped while the reference keeps the
+     * exact figure.
      */
     // Package-private for the boundary test: the clamp is deliberately lossy and no reachable scan exercises it.
     static List<com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2<?>> reportableCount(long value) {
@@ -273,7 +294,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     private List<MetadataAttributeV2> getCertificateMetadata(String discoverySource) {
         List<MetadataAttributeV2> attributes = new ArrayList<>();
 
-        //Total URL
+        // Total URL
         MetadataAttributeV2 attribute = new MetadataAttributeV2();
         attribute.setName("discoverySource");
         attribute.setUuid("000043aa-6022-11ed-9b6a-0242ac120002");
@@ -296,7 +317,7 @@ public class DiscoveryServiceImpl implements DiscoveryService {
     private List<MetadataAttributeV2> getReasonMeta(String exception) {
         List<MetadataAttributeV2> attributes = new ArrayList<>();
 
-        //Exception Reason
+        // Exception Reason
         MetadataAttributeV2 attribute = new MetadataAttributeV2();
         attribute.setName("reason");
         attribute.setUuid("abc0412a-60f6-11ed-9b6a-0242ac120002");

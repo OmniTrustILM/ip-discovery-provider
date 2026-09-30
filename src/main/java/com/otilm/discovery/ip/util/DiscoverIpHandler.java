@@ -8,12 +8,14 @@ import inet.ipaddr.AddressStringException;
 import inet.ipaddr.IPAddress;
 import inet.ipaddr.IPAddressSeqRange;
 import inet.ipaddr.IPAddressString;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Pattern;
 import org.apache.commons.net.util.SubnetUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.*;
-import java.util.regex.Pattern;
 
 public class DiscoverIpHandler {
     private static final Logger logger = LoggerFactory.getLogger(DiscoverIpHandler.class);
@@ -22,7 +24,8 @@ public class DiscoverIpHandler {
     // port-range scan runs the loop thousands of times, so compiling inside it was pure overhead.
     private static final Pattern HOSTNAME_PATTERN = Pattern.compile(AttributeServiceImpl.HOSTNAME_VALIDATION_REGEX);
     private static final Pattern IP_ADDRESS_PATTERN = Pattern.compile(AttributeServiceImpl.IP_ADDRESS_VALIDATION_REGEX);
-    private static final Pattern IP_ADDRESS_RANGE_PATTERN = Pattern.compile(AttributeServiceImpl.IP_ADDRESS_RANGE_VALIDATION_REGEX);
+    private static final Pattern IP_ADDRESS_RANGE_PATTERN = Pattern
+            .compile(AttributeServiceImpl.IP_ADDRESS_RANGE_VALIDATION_REGEX);
     private static final Pattern IP_SUBNET_PATTERN = Pattern.compile(AttributeServiceImpl.IP_SUBNET_VALIDATION_REGEX);
     private static final Pattern PORT_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_VALIDATION_REGEX);
     private static final Pattern PORT_RANGE_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_RANGE_VALIDATION_REGEX);
@@ -67,7 +70,8 @@ public class DiscoverIpHandler {
                 ipsHostname.addAll(Arrays.asList(utils.getInfo().getAllAddresses()));
             } else {
                 logger.error("Invalid input format for IP address, hostname, range, or subnet: {}", indIp);
-                throw new ValidationException("Invalid input format for IP address, hostname, range, or subnet: " + indIp);
+                throw new ValidationException(
+                        "Invalid input format for IP address, hostname, range, or subnet: " + indIp);
             }
         }
 
@@ -98,7 +102,7 @@ public class DiscoverIpHandler {
     /**
      * Get ports from a comma separated string of ports or all ports
      *
-     * @param ports    comma separated string of ports
+     * @param ports comma separated string of ports
      * @param allPorts boolean value to get all ports
      * @return set of ports
      */
@@ -134,6 +138,7 @@ public class DiscoverIpHandler {
 
     /**
      * Build URLs for all IP addresses in range with defined ports
+     *
      * @param ipsInRange set of IP addresses in range
      * @param applicablePorts set of ports
      * @return set of URLs

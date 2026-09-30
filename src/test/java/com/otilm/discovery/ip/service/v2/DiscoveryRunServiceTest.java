@@ -19,16 +19,6 @@ import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
-import org.awaitility.Awaitility;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.info.BuildProperties;
-
-import javax.security.auth.x500.X500Principal;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.security.KeyPair;
@@ -41,6 +31,15 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.security.auth.x500.X500Principal;
+import org.awaitility.Awaitility;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.info.BuildProperties;
 
 class DiscoveryRunServiceTest {
 
@@ -49,8 +48,7 @@ class DiscoveryRunServiceTest {
     private final RunRegistry registry = new RunRegistry();
     private final BufferBudget budget = new BufferBudget(2, 100_000, 1L << 30, 1L << 31, 30_000);
     private final CountingProbes probes = new CountingProbes();
-    private final DiscoveryRunService service =
-            new DiscoveryRunService(registry, budget, attributeService(), probes);
+    private final DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), probes);
 
     @BeforeAll
     static void mintCertificate() throws Exception {
@@ -62,7 +60,7 @@ class DiscoveryRunServiceTest {
                 .getCertificate(new JcaX509v3CertificateBuilder(subject, BigInteger.ONE,
                         Date.from(Instant.now().minus(Duration.ofDays(1))),
                         Date.from(Instant.now().plus(Duration.ofDays(1))), subject, pair.getPublic())
-                                .build(new JcaContentSignerBuilder("SHA256withRSA").build(pair.getPrivate())));
+                        .build(new JcaContentSignerBuilder("SHA256withRSA").build(pair.getPrivate())));
     }
 
     private static DiscoveryAttributeServiceImpl attributeService() {
@@ -77,7 +75,7 @@ class DiscoveryRunServiceTest {
         @Override
         public ConnectionResponse getCertificates(String url) throws IOException {
             probed.incrementAndGet();
-            return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {certificate});
+            return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[]{certificate});
         }
     }
 
@@ -189,7 +187,8 @@ class DiscoveryRunServiceTest {
         DiscoveryInitiateRequestDto request = initiateRequest(UUID.randomUUID(), "10.0.0.1");
         request.setResources(List.of(Resource.SECRET));
 
-        ValidationException thrown = Assertions.assertThrows(ValidationException.class, () -> service.initiate(request));
+        ValidationException thrown = Assertions
+                .assertThrows(ValidationException.class, () -> service.initiate(request));
         Assertions.assertTrue(thrown.getMessage().contains("secrets"), thrown.getMessage());
     }
 
@@ -245,8 +244,8 @@ class DiscoveryRunServiceTest {
 
     /**
      * A drain arriving below the watermark is a redelivered or late request, not a defect. Serving it would be worse
-     * than answering nothing: Core advances its cursor to the highest sequence in a page, so it would skip whatever
-     * lay in between.
+     * than answering nothing: Core advances its cursor to the highest sequence in a page, so it would skip whatever lay
+     * in between.
      */
     @Test
     void answersALateDrainWithAnEmptyPageRatherThanFailingTheRun() {
@@ -313,8 +312,8 @@ class DiscoveryRunServiceTest {
     /**
      * Core allows a stop while its own status is still IN_PROGRESS, which it stays through the tail drain after this
      * connector has reported the run complete. Answered as a success, Core records the finished run as stopped and
-     * deletes its drain; refused as past the point of no return, Core keeps draining and the run completes. Stopping
-     * a run that is genuinely scanning is what StopResumeSeamTest covers.
+     * deletes its drain; refused as past the point of no return, Core keeps draining and the run completes. Stopping a
+     * run that is genuinely scanning is what StopResumeSeamTest covers.
      */
     @Test
     void refusesToStopARunThatHasAlreadyFinished() {
@@ -427,8 +426,8 @@ class DiscoveryRunServiceTest {
     }
 
     /**
-     * Failures are counted within processed rather than beside it. A sweep that reached every target and found
-     * nothing listening is a complete run, not a degraded one, and must not read as stuck at less than 100 per cent.
+     * Failures are counted within processed rather than beside it. A sweep that reached every target and found nothing
+     * listening is a complete run, not a degraded one, and must not read as stuck at less than 100 per cent.
      */
     @Test
     void anAllFailedSweepStillReachesEveryTarget() {

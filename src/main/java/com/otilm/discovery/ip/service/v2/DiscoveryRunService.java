@@ -20,10 +20,7 @@ import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
 import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
+import java.time.Duration;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,7 +32,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
-import java.time.Duration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 /**
  * The run lifecycle: initiate, status, results, stop, resume, cancel.
@@ -54,7 +53,9 @@ public class DiscoveryRunService {
 
     private static final Logger logger = LoggerFactory.getLogger(DiscoveryRunService.class);
 
-    /** What a scan of this connector can produce. A run asking for anything else is refused rather than shortchanged. */
+    /**
+     * What a scan of this connector can produce. A run asking for anything else is refused rather than shortchanged.
+     */
     private static final Set<Resource> SUPPORTED = EnumSet.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY);
 
     private final RunRegistry registry;
@@ -84,9 +85,9 @@ public class DiscoveryRunService {
      * Starts a run, or recognises one already started.
      *
      * <p>
-     * The contract requires the repeat to be answered idempotently, and it has to be answered without starting a
-     * second scan: a second scan would renumber from 1, and Core's cursor filter would drop every item it re-emitted
-     * without reporting anything wrong.
+     * The contract requires the repeat to be answered idempotently, and it has to be answered without starting a second
+     * scan: a second scan would renumber from 1, and Core's cursor filter would drop every item it re-emitted without
+     * reporting anything wrong.
      */
     public DiscoveryInitiateResponseDto initiate(DiscoveryInitiateRequestDto request) {
         // Under the lock from the lookup on, so a concurrent duplicate waits for the first to register and start the
@@ -98,8 +99,9 @@ public class DiscoveryRunService {
         UUID runId = request.getRunId();
         var known = registry.find(runId);
         if (known.isPresent()) {
-            logger.info("Run {} is already tracked; answering the repeated initiate without starting a second scan",
-                    runId);
+            logger
+                    .info("Run {} is already tracked; answering the repeated initiate without starting a second scan",
+                            runId);
             return accepted(known.get());
         }
 
@@ -158,8 +160,8 @@ public class DiscoveryRunService {
      * Serves the items after the given cursor, and drops what the cursor says Core already has.
      *
      * <p>
-     * Discarding first is what makes a repeat cheap, and the buffer decides what a cursor below its watermark means —
-     * a late or redelivered drain is transport, not a defect.
+     * Discarding first is what makes a repeat cheap, and the buffer decides what a cursor below its watermark means — a
+     * late or redelivered drain is transport, not a defect.
      */
     public DiscoveryResultsResponseDto results(DiscoveryDrainRequestDto request) {
         UUID runId = request.getRunId();
@@ -196,8 +198,8 @@ public class DiscoveryRunService {
      *
      * <p>
      * The run stays because the drain that acknowledges everything is not only Core's full acknowledgement. Core also
-     * sends it as an ordinary drain before it has recorded the run as completed, and keeps polling status after it;
-     * a run dropped here answers that poll with a 404, which Core reads as terminal, and a completed discovery ends
+     * sends it as an ordinary drain before it has recorded the run as completed, and keeps polling status after it; a
+     * run dropped here answers that poll with a 404, which Core reads as terminal, and a completed discovery ends
      * FAILED. The entry goes when the reaper finds it idle.
      *
      * <p>
@@ -214,8 +216,8 @@ public class DiscoveryRunService {
         }
         if (budget.close(runId)) {
             logger
-                    .info("Run {} gave back its scanning slot: {} and acknowledged through sequence {}", runId,
-                            state, afterSequence);
+                    .info("Run {} gave back its scanning slot: {} and acknowledged through sequence {}", runId, state,
+                            afterSequence);
         }
     }
 
@@ -361,8 +363,7 @@ public class DiscoveryRunService {
      * Only a handle that says {@code stopped} may be rebuilt. A {@code running} one describes a run whose in-flight
      * state is genuinely gone, and rebuilding on it is silent loss: an initiate-time handle reads cursor 0 and high
      * water 0, indistinguishable from a stopped run checkpointed before it scanned anything, so the rebuilt run
-     * renumbers from 1 while Core's cursor sits at N and every re-emitted item is discarded without an error
-     * anywhere.
+     * renumbers from 1 while Core's cursor sits at N and every re-emitted item is discarded without an error anywhere.
      */
     private RunHandle rebuild(DiscoveryV2ScopedRequestDto request) {
         UUID runId = request.getRunId();
@@ -397,9 +398,9 @@ public class DiscoveryRunService {
      * A rebuilt run serves nothing until a drain proves Core is exactly at the checkpoint it was rebuilt from.
      *
      * <p>
-     * The check cannot live in the rebuild call alone. Status and resume rebuild too, and after either of those the
-     * run is registered, so every later drain would take the ordinary path with no cursor check at all -- including
-     * the resume flow the verdict exists for, where Core expedites the drain straight into a registered run.
+     * The check cannot live in the rebuild call alone. Status and resume rebuild too, and after either of those the run
+     * is registered, so every later drain would take the ordinary path with no cursor check at all -- including the
+     * resume flow the verdict exists for, where Core expedites the drain straight into a registered run.
      */
     private void requireDrainVerified(UUID runId, long afterSequence) {
         Long owed = registry.drainVerificationOwed(runId).orElse(null);
@@ -424,13 +425,13 @@ public class DiscoveryRunService {
      *
      * <p>
      * {@code afterSequence} is Core's live cursor. Equal to the checkpoint's high water means Core already holds
-     * everything the run produced, so the rebuilt run can serve — an empty page, then whatever a resume produces.
-     * Below it means items were produced and never handed over, and they cannot be regenerated. Above it means the
-     * handle is stale, left behind by a resume Core failed to record.
+     * everything the run produced, so the rebuilt run can serve — an empty page, then whatever a resume produces. Below
+     * it means items were produced and never handed over, and they cannot be regenerated. Above it means the handle is
+     * stale, left behind by a resume Core failed to record.
      *
      * <p>
-     * Both of those answer 404 rather than serving. Core advances its cursor to the highest sequence in a page, not
-     * to the end of a contiguous run, so serving across a hole would let the run finish clean with items missing.
+     * Both of those answer 404 rather than serving. Core advances its cursor to the highest sequence in a page, not to
+     * the end of a contiguous run, so serving across a hole would let the run finish clean with items missing.
      */
     private void rebuildForDrain(DiscoveryDrainRequestDto request) {
         UUID runId = request.getRunId();
@@ -448,13 +449,12 @@ public class DiscoveryRunService {
     private static final Duration SCAN_SETTLE = Duration.ofSeconds(10);
 
     /** States a run does not leave. A terminal run produces nothing more, so a full acknowledgement ends it here. */
-    private static final Set<DiscoveryRunState> TERMINAL =
-            EnumSet.of(DiscoveryRunState.COMPLETED, DiscoveryRunState.FAILED, DiscoveryRunState.CANCELLED);
+    private static final Set<DiscoveryRunState> TERMINAL = EnumSet
+            .of(DiscoveryRunState.COMPLETED, DiscoveryRunState.FAILED, DiscoveryRunState.CANCELLED);
 
     /**
      * The checkpoint indexes into an enumeration, so it can only be continued against the same one. Any change to
-     * enumeration order invalidates the cursor, and the run is refused loudly rather than resumed at the wrong
-     * offset.
+     * enumeration order invalidates the cursor, and the run is refused loudly rather than resumed at the wrong offset.
      */
     private static void requireSameEnumeration(UUID runId, RunHandle handle, TargetEnumeration targets) {
         if (!targets.digest().equals(handle.targetsDigest())) {
@@ -466,9 +466,9 @@ public class DiscoveryRunService {
      * Work in targets, yield in items, and nothing at all when there is nothing to say.
      *
      * <p>
-     * The whole object is omitted rather than sent with every field absent. Core keeps the last progress it was
-     * given and cannot tell an empty report from a missing one, so an all-null object would overwrite a real
-     * measurement with silence.
+     * The whole object is omitted rather than sent with every field absent. Core keeps the last progress it was given
+     * and cannot tell an empty report from a missing one, so an all-null object would overwrite a real measurement with
+     * silence.
      */
     private DiscoveryProgressDto progressOf(UUID runId) {
         RunHandle handle = registry.find(runId).orElseThrow(() -> new UnknownRunException(runId));
@@ -554,8 +554,8 @@ public class DiscoveryRunService {
     }
 
     /**
-     * The targets come from the request every time rather than from the checkpoint. The checkpoint carries a digest
-     * of them instead, so a resumed run can prove the enumeration it is about to continue is the one it left.
+     * The targets come from the request every time rather than from the checkpoint. The checkpoint carries a digest of
+     * them instead, so a resumed run can prove the enumeration it is about to continue is the one it left.
      */
     private TargetEnumeration enumerate(DiscoveryV2ScopedRequestDto request) {
         List<String> hosts = attributes.readHosts(request.getAttributes());
@@ -571,7 +571,10 @@ public class DiscoveryRunService {
         if (resources == null || resources.isEmpty()) {
             throw new ValidationException("resources is required and must name at least one resource type");
         }
-        List<String> unsupported = resources.stream().filter(r -> !SUPPORTED.contains(r)).map(Resource::getCode)
+        List<String> unsupported = resources
+                .stream()
+                .filter(r -> !SUPPORTED.contains(r))
+                .map(Resource::getCode)
                 .toList();
         if (!unsupported.isEmpty()) {
             throw new ValidationException("this connector does not discover " + unsupported + "; supported: "

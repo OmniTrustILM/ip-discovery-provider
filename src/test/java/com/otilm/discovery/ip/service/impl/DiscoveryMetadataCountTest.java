@@ -2,10 +2,9 @@ package com.otilm.discovery.ip.service.impl;
 
 import com.otilm.api.model.common.attribute.v2.content.BaseAttributeContentV2;
 import com.otilm.api.model.common.attribute.v2.content.IntegerAttributeContentV2;
+import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 /**
  * The scan counts targets in longs, but the metadata attributes have been INTEGER since v1 and their type is part of
@@ -31,8 +30,8 @@ class DiscoveryMetadataCountTest {
     }
 
     /**
-     * Past the boundary the numeric value saturates rather than wrapping negative, and the reference still carries
-     * the true count — which is the whole point of clamping instead of narrowing.
+     * Past the boundary the numeric value saturates rather than wrapping negative, and the reference still carries the
+     * true count — which is the whole point of clamping instead of narrowing.
      */
     @Test
     void clampsPastTheBoundaryWhileKeepingTheTrueCountInTheReference() {

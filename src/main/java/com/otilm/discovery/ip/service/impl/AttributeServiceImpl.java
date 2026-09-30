@@ -21,12 +21,11 @@ import com.otilm.core.util.AttributeDefinitionUtils;
 import com.otilm.discovery.ip.enums.DiscoveryKind;
 import com.otilm.discovery.ip.service.AttributeService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Service
 public class AttributeServiceImpl implements AttributeService {
@@ -34,49 +33,32 @@ public class AttributeServiceImpl implements AttributeService {
     private static final Logger logger = LoggerFactory.getLogger(AttributesController.class);
 
     public static final String IP_ADDRESS_VALIDATION_REGEX = "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$";
-    public static final String IP_ADDRESS_RANGE_VALIDATION_REGEX =
-            "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}-((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$";
-    public static final String HOSTNAME_VALIDATION_REGEX =
-            "^(?=.{4,253}$)(((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\\.)+[a-zA-Z]{2,63})$";
+    public static final String IP_ADDRESS_RANGE_VALIDATION_REGEX = "^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}-((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$";
+    public static final String HOSTNAME_VALIDATION_REGEX = "^(?=.{4,253}$)(((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\\.)+[a-zA-Z]{2,63})$";
     public static final String IP_SUBNET_VALIDATION_REGEX = "^([0-9]{1,3}\\.){3}[0-9]{1,3}($|/([1-9]|[12][0-9]|3[012]))$";
 
     // Combining the patterns into one
-    public static final String COMBINED_IP_HOSTNAME_VALIDATION_REGEX =
-            "^" +
-                    "(?:" +
-                    IP_ADDRESS_VALIDATION_REGEX.substring(1, IP_ADDRESS_VALIDATION_REGEX.length() - 1) + "|" +
-                    IP_ADDRESS_RANGE_VALIDATION_REGEX.substring(1, IP_ADDRESS_RANGE_VALIDATION_REGEX.length() - 1) + "|" +
-                    HOSTNAME_VALIDATION_REGEX.substring(1, HOSTNAME_VALIDATION_REGEX.length() - 1) + "|" +
-                    IP_SUBNET_VALIDATION_REGEX.substring(1, IP_SUBNET_VALIDATION_REGEX.length() - 1) +
-                    ")" +
-                    "(?:," +
-                    "(?:" +
-                    IP_ADDRESS_VALIDATION_REGEX.substring(1, IP_ADDRESS_VALIDATION_REGEX.length() - 1) + "|" +
-                    IP_ADDRESS_RANGE_VALIDATION_REGEX.substring(1, IP_ADDRESS_RANGE_VALIDATION_REGEX.length() - 1) + "|" +
-                    HOSTNAME_VALIDATION_REGEX.substring(1, HOSTNAME_VALIDATION_REGEX.length() - 1) + "|" +
-                    IP_SUBNET_VALIDATION_REGEX.substring(1, IP_SUBNET_VALIDATION_REGEX.length() - 1) +
-                    ")" +
-                    ")*" +
-                    "$";
+    public static final String COMBINED_IP_HOSTNAME_VALIDATION_REGEX = "^" + "(?:"
+            + IP_ADDRESS_VALIDATION_REGEX.substring(1, IP_ADDRESS_VALIDATION_REGEX.length() - 1) + "|"
+            + IP_ADDRESS_RANGE_VALIDATION_REGEX.substring(1, IP_ADDRESS_RANGE_VALIDATION_REGEX.length() - 1) + "|"
+            + HOSTNAME_VALIDATION_REGEX.substring(1, HOSTNAME_VALIDATION_REGEX.length() - 1) + "|"
+            + IP_SUBNET_VALIDATION_REGEX.substring(1, IP_SUBNET_VALIDATION_REGEX.length() - 1) + ")" + "(?:," + "(?:"
+            + IP_ADDRESS_VALIDATION_REGEX.substring(1, IP_ADDRESS_VALIDATION_REGEX.length() - 1) + "|"
+            + IP_ADDRESS_RANGE_VALIDATION_REGEX.substring(1, IP_ADDRESS_RANGE_VALIDATION_REGEX.length() - 1) + "|"
+            + HOSTNAME_VALIDATION_REGEX.substring(1, HOSTNAME_VALIDATION_REGEX.length() - 1) + "|"
+            + IP_SUBNET_VALIDATION_REGEX.substring(1, IP_SUBNET_VALIDATION_REGEX.length() - 1) + ")" + ")*" + "$";
 
     public static final String PORT_VALIDATION_REGEX = "^(6553[0-5]|655[0-2]\\d|65[0-4]\\d{2}|6[0-4]\\d{3}|[1-5]\\d{4}|[1-9]\\d{0,3})$";
-    public static final String PORT_RANGE_VALIDATION_REGEX =
-            "^" +
-                    PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) + "-" +
-                    PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) +
-                    "$";
+    public static final String PORT_RANGE_VALIDATION_REGEX = "^"
+            + PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) + "-"
+            + PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) + "$";
 
     // Combining the patterns into one
-    public static final String COMBINED_PORT_VALIDATION_REGEX =
-            "^(" +
-                    PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) +
-                    "|" +
-                    PORT_RANGE_VALIDATION_REGEX.substring(1, PORT_RANGE_VALIDATION_REGEX.length() - 1) +
-                    ")(,(" +
-                    PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) +
-                    "|" +
-                    PORT_RANGE_VALIDATION_REGEX.substring(1, PORT_RANGE_VALIDATION_REGEX.length() - 1) +
-                    "))*$";
+    public static final String COMBINED_PORT_VALIDATION_REGEX = "^("
+            + PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) + "|"
+            + PORT_RANGE_VALIDATION_REGEX.substring(1, PORT_RANGE_VALIDATION_REGEX.length() - 1) + ")(,("
+            + PORT_VALIDATION_REGEX.substring(1, PORT_VALIDATION_REGEX.length() - 1) + "|"
+            + PORT_RANGE_VALIDATION_REGEX.substring(1, PORT_RANGE_VALIDATION_REGEX.length() - 1) + "))*$";
 
     public static final String INFO_ATTRIBUTE_IP_HOSTNAME_UUID = "900a9da3-d7e3-4771-bdec-809f507731f1";
     public static final String INFO_ATTRIBUTE_IP_HOSTNAME_NAME = "info_ipHostname";
@@ -94,26 +76,27 @@ public class AttributeServiceImpl implements AttributeService {
     public static final String DATA_ATTRIBUTE_PORT_DESCRIPTION = "Multiple values can be given separated by comma ','. "
             + "Port number or range of port numbers are supported.";
     public static final String DATA_ATTRIBUTE_PORT_LABEL = "Ports";
-    public static final StringAttributeContentV2 DATA_ATTRIBUTE_PORT_DEFAULT_CONTENT = new StringAttributeContentV2("443", "443");
+    public static final StringAttributeContentV2 DATA_ATTRIBUTE_PORT_DEFAULT_CONTENT = new StringAttributeContentV2(
+            "443", "443");
 
     public static final String DATA_ATTRIBUTE_ALL_PORTS_UUID = "3c70d728-e8c3-40f9-b9b2-5d7256f89ef0";
     public static final String DATA_ATTRIBUTE_ALL_PORTS_NAME = "allPorts";
     public static final String DATA_ATTRIBUTE_ALL_PORTS_DESCRIPTION = "Check to discover certificates from all ports.";
     public static final String DATA_ATTRIBUTE_ALL_PORTS_LABEL = "All Ports?";
-    public static final BooleanAttributeContentV2 DATA_ATTRIBUTE_ALL_PORTS_DEFAULT_CONTENT = new BooleanAttributeContentV2(false);
+    public static final BooleanAttributeContentV2 DATA_ATTRIBUTE_ALL_PORTS_DEFAULT_CONTENT = new BooleanAttributeContentV2(
+            false);
 
     public static final String DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_UUID = "1517c7a5-34cb-4f94-a0aa-1e9fe5b5b277";
     public static final String DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME = "data_parallel_executions";
     public static final String DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_DESCRIPTION = "Number of parallel executions of the discovery process. Default is 1 and maximum is 100.";
     public static final String DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_LABEL = "Number of parallel executions";
-    public static final IntegerAttributeContentV2 DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_DEFAULT_CONTENT =
-            new IntegerAttributeContentV2(1);
+    public static final IntegerAttributeContentV2 DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_DEFAULT_CONTENT = new IntegerAttributeContentV2(
+            1);
     // The published constraint and the bound the scan loop relies on are the same numbers. They were written twice
     // and only the published one was enforced, which is how a request could ask for a parallelism the loop could
     // not honour.
     public static final int PARALLEL_EXECUTIONS_MIN = 1;
     public static final int PARALLEL_EXECUTIONS_MAX = 100;
-
 
     @Override
     public List<BaseAttribute> getAttributes(String kind) {
@@ -158,13 +141,13 @@ public class AttributeServiceImpl implements AttributeService {
                 the port numbers can be provided as input, the following is supported:
                 - Single port number (`443`)
                 - Range of port numbers (`9000-10000`)
-                
+
                 URLs for discovery are built as combination of provided IP addresses or hostnames and port numbers.
                 Each URL is processed separately to discover the certificates.
 
                 *The discovery can be done on all ports. However, it is recommended to provide the port numbers for better performance
                 and avoiding network issues.*
-                
+
                 By default, each URL is processed sequentially. The number of parallel executions can be increased
                 to improve the performance. The maximum number of parallel executions that can be set is `100`.
                 """;
@@ -283,9 +266,9 @@ public class AttributeServiceImpl implements AttributeService {
     }
 
     /**
-     * Bounds the parallelism a scan will honour. The published range constraint covers the validation endpoint, but
-     * the discovery endpoint starts a scan without consulting it, and the scan's only backpressure is a batch that
-     * fills to this value — a value it can never reach submits every target at once.
+     * Bounds the parallelism a scan will honour. The published range constraint covers the validation endpoint, but the
+     * discovery endpoint starts a scan without consulting it, and the scan's only backpressure is a batch that fills to
+     * this value — a value it can never reach submits every target at once.
      *
      * @return the value, so a caller can read and bound in one expression
      */
@@ -308,8 +291,9 @@ public class AttributeServiceImpl implements AttributeService {
     }
 
     private void validateIpHostnameDataAttributeContentValue(List<RequestAttribute> attributes) {
-        StringAttributeContentV2 content = AttributeDefinitionUtils.getSingleItemAttributeContentValue(
-                DATA_ATTRIBUTE_DISCOVERY_IP_NAME, attributes, StringAttributeContentV2.class);
+        StringAttributeContentV2 content = AttributeDefinitionUtils
+                .getSingleItemAttributeContentValue(DATA_ATTRIBUTE_DISCOVERY_IP_NAME, attributes,
+                        StringAttributeContentV2.class);
 
         if (content == null || content.getData() == null) {
             throw new ValidationException("Discovery IPs/Hostname is required, but was not provided");
@@ -319,8 +303,9 @@ public class AttributeServiceImpl implements AttributeService {
     }
 
     public static String getDiscoveryIpDataAttributeContentValue(List<RequestAttribute> attributes) {
-        StringAttributeContentV2 content = AttributeDefinitionUtils.getSingleItemAttributeContentValue(
-                DATA_ATTRIBUTE_DISCOVERY_IP_NAME, attributes, StringAttributeContentV2.class);
+        StringAttributeContentV2 content = AttributeDefinitionUtils
+                .getSingleItemAttributeContentValue(DATA_ATTRIBUTE_DISCOVERY_IP_NAME, attributes,
+                        StringAttributeContentV2.class);
 
         if (content != null && content.getData() != null) {
             return content.getData();
@@ -330,8 +315,9 @@ public class AttributeServiceImpl implements AttributeService {
     }
 
     public static String getPortDataAttributeContentValue(List<RequestAttribute> attributes) {
-        StringAttributeContentV2 content = AttributeDefinitionUtils.getSingleItemAttributeContentValue(
-                DATA_ATTRIBUTE_PORT_NAME, attributes, StringAttributeContentV2.class);
+        StringAttributeContentV2 content = AttributeDefinitionUtils
+                .getSingleItemAttributeContentValue(DATA_ATTRIBUTE_PORT_NAME, attributes,
+                        StringAttributeContentV2.class);
 
         if (content != null && content.getData() != null) {
             return content.getData();
@@ -341,8 +327,9 @@ public class AttributeServiceImpl implements AttributeService {
     }
 
     public static Boolean getAllPortsDataAttributeContentValue(List<RequestAttribute> attributes) {
-        BooleanAttributeContentV2 content = AttributeDefinitionUtils.getSingleItemAttributeContentValue(
-                DATA_ATTRIBUTE_ALL_PORTS_NAME, attributes, BooleanAttributeContentV2.class);
+        BooleanAttributeContentV2 content = AttributeDefinitionUtils
+                .getSingleItemAttributeContentValue(DATA_ATTRIBUTE_ALL_PORTS_NAME, attributes,
+                        BooleanAttributeContentV2.class);
 
         if (content != null && content.getData() != null) {
             return content.getData();
@@ -352,8 +339,9 @@ public class AttributeServiceImpl implements AttributeService {
     }
 
     public static Integer getParallelExecutionsDataAttributeContentValue(List<RequestAttribute> attributes) {
-        IntegerAttributeContentV2 content = AttributeDefinitionUtils.getSingleItemAttributeContentValue(
-                DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME, attributes, IntegerAttributeContentV2.class);
+        IntegerAttributeContentV2 content = AttributeDefinitionUtils
+                .getSingleItemAttributeContentValue(DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_NAME, attributes,
+                        IntegerAttributeContentV2.class);
 
         if (content != null && content.getData() != null) {
             return content.getData();

@@ -1,10 +1,9 @@
 package com.otilm.discovery.ip.enums;
 
 import com.otilm.api.exception.ValidationException;
+import java.util.List;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import java.util.List;
 
 class DiscoveryKindTest {
 

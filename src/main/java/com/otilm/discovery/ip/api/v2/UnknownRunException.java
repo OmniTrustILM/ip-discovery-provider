@@ -4,8 +4,8 @@ import java.util.UUID;
 
 /**
  * The connector does not track this run. Answered as 404 with the contract's own not-tracked code, which is Core's
- * definitive signal that retrying cannot recover the run — including after a restart, where a running run's buffer
- * did not survive.
+ * definitive signal that retrying cannot recover the run — including after a restart, where a running run's buffer did
+ * not survive.
  */
 public class UnknownRunException extends RuntimeException {
 

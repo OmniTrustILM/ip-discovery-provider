@@ -7,6 +7,6 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 
 public interface ConnectionService {
-	public ConnectionResponse getCertificates(String url) throws IOException, NoSuchAlgorithmException, KeyManagementException;
+    public ConnectionResponse getCertificates(String url)
+            throws IOException, NoSuchAlgorithmException, KeyManagementException;
 }
-

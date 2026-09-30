@@ -8,10 +8,9 @@ import com.otilm.api.model.client.connector.v2.FeatureFlag;
 import com.otilm.api.model.client.connector.v2.InfoResponse;
 import com.otilm.discovery.ip.Application;
 import com.otilm.discovery.ip.ConnectorV2Api;
+import java.util.List;
 import org.springframework.boot.info.BuildProperties;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 /**
  * Advertises the v2 surface only.

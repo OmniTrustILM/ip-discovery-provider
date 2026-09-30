@@ -27,13 +27,13 @@ public class DiscoveryHistoryServiceTest {
     }
 
     @Test
-    public void testAddDiscovery(){
+    public void testAddDiscovery() {
         DiscoveryHistory history = discoveryHistoryService.addHistory(discoveryProviderDto);
         Assertions.assertNotNull(history);
     }
 
     @Test
-    public void testGetDiscoveryById(){
+    public void testGetDiscoveryById() {
         Assertions.assertThrows(NotFoundException.class, () -> discoveryHistoryService.getHistoryById(12312L));
     }
 }

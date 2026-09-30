@@ -5,22 +5,12 @@ import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
-import javax.security.auth.x500.X500Principal;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.cert.X509Certificate;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
@@ -33,6 +23,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.security.auth.x500.X500Principal;
+import org.awaitility.Awaitility;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 class ScanRunnerTest {
 
@@ -50,7 +49,7 @@ class ScanRunnerTest {
                 .getCertificate(new JcaX509v3CertificateBuilder(subject, BigInteger.ONE,
                         Date.from(Instant.now().minus(Duration.ofDays(1))),
                         Date.from(Instant.now().plus(Duration.ofDays(1))), subject, pair.getPublic())
-                                .build(new JcaContentSignerBuilder("SHA256withRSA").build(pair.getPrivate())));
+                        .build(new JcaContentSignerBuilder("SHA256withRSA").build(pair.getPrivate())));
     }
 
     /** Answers every probe with one certificate, counting the targets it was asked for. */
@@ -60,7 +59,7 @@ class ScanRunnerTest {
         @Override
         public ConnectionResponse getCertificates(String url) {
             probed.incrementAndGet();
-            return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {certificate});
+            return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[]{certificate});
         }
     }
 
@@ -77,7 +76,7 @@ class ScanRunnerTest {
         @Override
         public ConnectionResponse getCertificates(String url) throws IOException {
             if (!url.equals(stallingUrl)) {
-                return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {certificate});
+                return new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[]{certificate});
             }
             reached.countDown();
             try {
@@ -151,9 +150,9 @@ class ScanRunnerTest {
     }
 
     /**
-     * The test Task 2's deadline exists for. A quiesce has nothing to wait for — under backpressure the chunk
-     * proceeds at Core's drain cadence, or not at all while the platform is unreachable, which is the situation an
-     * operator reaches for stop in.
+     * The test Task 2's deadline exists for. A quiesce has nothing to wait for — under backpressure the chunk proceeds
+     * at Core's drain cadence, or not at all while the platform is unreachable, which is the situation an operator
+     * reaches for stop in.
      */
     @Test
     void stopReturnsWhileATargetIsStillStalling() throws Exception {
@@ -205,8 +204,8 @@ class ScanRunnerTest {
     }
 
     /**
-     * Resume re-scans the interrupted chunk. The duplicates are contract-legal — Core collapses them on uniqueRef —
-     * and the sequence space continues rather than restarting, which is what keeps them visible to Core at all.
+     * Resume re-scans the interrupted chunk. The duplicates are contract-legal — Core collapses them on uniqueRef — and
+     * the sequence space continues rather than restarting, which is what keeps them visible to Core at all.
      */
     @Test
     void resumesFromTheBoundaryAndContinuesTheSequenceSpace() {
@@ -214,8 +213,9 @@ class ScanRunnerTest {
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.12", "443", false);
         BufferBudget budget = roomyBudget();
 
-        registry.register(runId, new RunHandle(RunHandle.RunState.RUNNING, 8L, 8L, targets.digest(), 8L, 0L,
-                Map.of(Resource.CERTIFICATE.getCode(), 8L)));
+        registry
+                .register(runId, new RunHandle(RunHandle.RunState.RUNNING, 8L, 8L, targets.digest(), 8L, 0L,
+                        Map.of(Resource.CERTIFICATE.getCode(), 8L)));
         ResultBuffer buffer = openBuffer(runId, budget, 8L);
         AlwaysAnswers probes = new AlwaysAnswers();
 
@@ -227,7 +227,11 @@ class ScanRunnerTest {
         Assertions.assertEquals(12, handle.targetsProcessed(), "the carried counters continue rather than reset");
         Assertions.assertEquals(Map.of(Resource.CERTIFICATE.getCode(), 12L), handle.yieldByResource());
 
-        List<Long> sequences = buffer.page(8, 100, 1L << 20).items().stream().map(DiscoveredItemDto::getSequence)
+        List<Long> sequences = buffer
+                .page(8, 100, 1L << 20)
+                .items()
+                .stream()
+                .map(DiscoveredItemDto::getSequence)
                 .toList();
         Assertions.assertEquals(List.of(9L, 10L, 11L, 12L), sequences, "a resumed run continues its sequence space");
     }
@@ -236,8 +240,7 @@ class ScanRunnerTest {
     void doesNothingWhenTheCursorIsAlreadyAtTheEnd() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
-        registry
-                .register(runId, new RunHandle(RunHandle.RunState.RUNNING, 4L, 4L, targets.digest(), 4L, 0L, Map.of()));
+        registry.register(runId, new RunHandle(RunHandle.RunState.RUNNING, 4L, 4L, targets.digest(), 4L, 0L, Map.of()));
         ResultBuffer buffer = openBuffer(runId, roomyBudget(), 4L);
         AlwaysAnswers probes = new AlwaysAnswers();
 
@@ -259,8 +262,8 @@ class ScanRunnerTest {
         registry.register(runId, RunHandle.initial(targets.digest()));
         ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
 
-        runner(runId, targets, buffer, new AlwaysAnswers(), 4,
-                Set.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY)).scan();
+        runner(runId, targets, buffer, new AlwaysAnswers(), 4, Set.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY))
+                .scan();
 
         RunHandle handle = registry.find(runId).orElseThrow();
         Assertions
@@ -317,8 +320,8 @@ class ScanRunnerTest {
         registry.register(runId, RunHandle.initial(targets.digest()));
         ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
 
-        runner(runId, targets, buffer, new AlwaysAnswers(), 4,
-                Set.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY)).scan();
+        runner(runId, targets, buffer, new AlwaysAnswers(), 4, Set.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY))
+                .scan();
 
         List<String> sources = buffer
                 .page(0, 100, 1L << 20)
@@ -338,9 +341,9 @@ class ScanRunnerTest {
     }
 
     /**
-     * A bound that cannot be waited out ends the run. Counting it as one more failed target would be silent
-     * truncation: a legitimate dark sweep also reports enormous failed-target counts, so a buffer-starved run would
-     * be indistinguishable from one that simply found nothing listening.
+     * A bound that cannot be waited out ends the run. Counting it as one more failed target would be silent truncation:
+     * a legitimate dark sweep also reports enormous failed-target counts, so a buffer-starved run would be
+     * indistinguishable from one that simply found nothing listening.
      */
     @Test
     void failsTheRunWhenTheBufferCannotHoldWhatItProduces() {
@@ -395,9 +398,9 @@ class ScanRunnerTest {
     }
 
     /**
-     * A certificate this connector cannot map is its own defect, and it must not read as a target that did not
-     * answer. Both end the target as failed -- nothing usable came of it either way -- but the reason distinguishes
-     * them, so a mapping that throws for every certificate cannot hide inside an unreachable-looking sweep.
+     * A certificate this connector cannot map is its own defect, and it must not read as a target that did not answer.
+     * Both end the target as failed -- nothing usable came of it either way -- but the reason distinguishes them, so a
+     * mapping that throws for every certificate cannot hide inside an unreachable-looking sweep.
      */
     @Test
     void tellsACertificateItCannotMapFromATargetThatNeverAnswered() throws Exception {
@@ -409,7 +412,7 @@ class ScanRunnerTest {
         X509Certificate unmappable = Mockito.mock(X509Certificate.class);
         Mockito.when(unmappable.getEncoded()).thenThrow(new CertificateEncodingException("no encoding"));
         ScanRunner runner = runner(runId, targets, buffer,
-                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {unmappable}), 4);
+                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[]{unmappable}), 4);
 
         runner.scan();
 
@@ -429,13 +432,13 @@ class ScanRunnerTest {
      */
     @Test
     void chargesAtLeastWhatACertificateItemSerialisesTo() {
-        Assertions.assertTrue(ScanRunner.weightOf(1000) > 1981,
-                "a 1000-byte certificate must not be charged less than it serialises to, was "
-                        + ScanRunner.weightOf(1000));
+        Assertions
+                .assertTrue(ScanRunner.weightOf(1000) > 1981,
+                        "a 1000-byte certificate must not be charged less than it serialises to, was "
+                                + ScanRunner.weightOf(1000));
         Assertions.assertEquals(4, ScanRunner.base64Length(3), "base64 is four characters per three bytes");
         Assertions.assertEquals(8, ScanRunner.base64Length(4), "a partial group still costs a whole group");
     }
-
 
     /**
      * A keys-only run needs the public key, not the DER. Reading the encoding before the resource set is consulted
@@ -452,7 +455,7 @@ class ScanRunnerTest {
         Mockito.when(unencodable.getEncoded()).thenThrow(new CertificateEncodingException("no encoding"));
         Mockito.when(unencodable.getPublicKey()).thenReturn(certificate.getPublicKey());
         ScanRunner runner = runner(runId, targets, buffer,
-                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {unencodable}), 4,
+                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[]{unencodable}), 4,
                 Set.of(Resource.CRYPTOGRAPHIC_KEY));
 
         runner.scan();
@@ -462,10 +465,9 @@ class ScanRunnerTest {
         Assertions.assertEquals("", runner.failureSummary());
     }
 
-
     /**
-     * Publishing the certificate and then failing on the key left Core holding an item for a target the run went on
-     * to report as failed, and abandoned the rest of the chain with the loss recorded nowhere.
+     * Publishing the certificate and then failing on the key left Core holding an item for a target the run went on to
+     * report as failed, and abandoned the rest of the chain with the loss recorded nowhere.
      */
     @Test
     void publishesNeitherItemWhenTheKeyCannotBeMapped() throws Exception {
@@ -477,11 +479,11 @@ class ScanRunnerTest {
         java.security.PublicKey unreadable = Mockito.mock(java.security.PublicKey.class);
         Mockito.when(unreadable.getEncoded()).thenReturn(null);
         X509Certificate half = Mockito.mock(X509Certificate.class);
-        Mockito.when(half.getEncoded()).thenReturn(new byte[] {1, 2, 3});
+        Mockito.when(half.getEncoded()).thenReturn(new byte[]{1, 2, 3});
         Mockito.when(half.getPublicKey()).thenReturn(unreadable);
 
         ScanRunner runner = runner(runId, targets, buffer,
-                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[] {half}), 4,
+                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[]{half}), 4,
                 Set.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY));
         runner.scan();
 

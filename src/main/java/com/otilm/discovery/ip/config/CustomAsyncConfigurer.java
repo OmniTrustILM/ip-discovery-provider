@@ -1,25 +1,24 @@
 package com.otilm.discovery.ip.config;
 
 import com.otilm.api.model.common.attribute.common.AttributeType;
-import com.otilm.api.model.common.attribute.v2.MetadataAttributeV2;
 import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
-import com.otilm.api.model.common.attribute.v2.content.StringAttributeContentV2;
 import com.otilm.api.model.common.attribute.common.properties.MetadataAttributeProperties;
+import com.otilm.api.model.common.attribute.v2.MetadataAttributeV2;
+import com.otilm.api.model.common.attribute.v2.content.StringAttributeContentV2;
 import com.otilm.api.model.core.discovery.DiscoveryStatus;
 import com.otilm.core.util.AttributeDefinitionUtils;
 import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import com.otilm.discovery.ip.service.DiscoveryHistoryService;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.AsyncConfigurer;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 @Configuration
 public class CustomAsyncConfigurer implements AsyncConfigurer {
@@ -44,7 +43,9 @@ public class CustomAsyncConfigurer implements AsyncConfigurer {
         return (ex, method, params) -> {
             if (method.getName().equals("discoverCertificate")) {
                 DiscoveryHistory history = (DiscoveryHistory) params[1];
-                logger.error("Error occurred while discovering certificates, name {}: {}", history.getName(), ex.getMessage(), ex);
+                logger
+                        .error("Error occurred while discovering certificates, name {}: {}", history.getName(),
+                                ex.getMessage(), ex);
                 history.setStatus(DiscoveryStatus.FAILED);
                 history.setMeta(AttributeDefinitionUtils.serialize(getReasonMeta(ex.getMessage())));
                 discoveryHistoryService.setHistory(history);

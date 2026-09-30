@@ -1,13 +1,12 @@
 package com.otilm.discovery.ip.util;
 
 import com.otilm.api.exception.ValidationException;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 /** The enumeration's order is frozen because a discovery v2 checkpoint is an index into it. These tests freeze it. */
 class TargetEnumerationTest {
@@ -48,11 +47,9 @@ class TargetEnumerationTest {
      * longer matches. Changing it invalidates every stopped run in the field, so change it only with a version bump.
      */
     /** Pinned alongside the sequence in emitsTargetsInThePinnedOrder; the two must never move independently. */
-    private static final String GOLDEN_DIGEST_FOR_THE_PINNED_ORDER =
-            "8c4e03b5fba58248abc43a6383e244039a787fe1e4a54666f39465d320d1dbec";
+    private static final String GOLDEN_DIGEST_FOR_THE_PINNED_ORDER = "8c4e03b5fba58248abc43a6383e244039a787fe1e4a54666f39465d320d1dbec";
 
-    private static final String GOLDEN_DIGEST_FOR_10_0_0_0_30_ON_80_443 =
-            "7c072d0d9a892c9f5812716a991f3f339b4abb8860773f7a581b6bfa6cf95f20";
+    private static final String GOLDEN_DIGEST_FOR_10_0_0_0_30_ON_80_443 = "7c072d0d9a892c9f5812716a991f3f339b4abb8860773f7a581b6bfa6cf95f20";
 
     @Test
     void producesTheSameDigestForTheSameScan() {
@@ -65,9 +62,9 @@ class TargetEnumerationTest {
 
     /**
      * Pinned to a literal sequence, not to a second run of the same code: comparing the implementation with itself
-     * stays green through any deterministic reordering. The digest does not close that gap either, since it hashes
-     * the canonical inputs and would be unchanged by target() emitting them in a different order — and the order is
-     * what a checkpoint indexes into.
+     * stays green through any deterministic reordering. The digest does not close that gap either, since it hashes the
+     * canonical inputs and would be unchanged by target() emitting them in a different order — and the order is what a
+     * checkpoint indexes into.
      *
      * <p>
      * Hostnames sort first, then merged address blocks ascending; within a host, ports ascend. Changing any of that
@@ -75,8 +72,8 @@ class TargetEnumerationTest {
      */
     @Test
     void emitsTargetsInThePinnedOrder() {
-        TargetEnumeration targets =
-                TargetEnumeration.of("b.example.com,10.0.0.1-10.0.0.2,a.example.com,192.168.5.0/30", "80,443", false);
+        TargetEnumeration targets = TargetEnumeration
+                .of("b.example.com,10.0.0.1-10.0.0.2,a.example.com,192.168.5.0/30", "80,443", false);
 
         List<String> emitted = new ArrayList<>();
         for (long i = 0; i < targets.size(); i++) {
@@ -84,11 +81,12 @@ class TargetEnumerationTest {
         }
 
         Assertions
-                .assertEquals(List
-                        .of("https://a.example.com:80", "https://a.example.com:443", "https://b.example.com:80",
-                                "https://b.example.com:443", "https://10.0.0.1:80", "https://10.0.0.1:443",
-                                "https://10.0.0.2:80", "https://10.0.0.2:443", "https://192.168.5.1:80",
-                                "https://192.168.5.1:443", "https://192.168.5.2:80", "https://192.168.5.2:443"),
+                .assertEquals(
+                        List
+                                .of("https://a.example.com:80", "https://a.example.com:443", "https://b.example.com:80",
+                                        "https://b.example.com:443", "https://10.0.0.1:80", "https://10.0.0.1:443",
+                                        "https://10.0.0.2:80", "https://10.0.0.2:443", "https://192.168.5.1:80",
+                                        "https://192.168.5.1:443", "https://192.168.5.2:80", "https://192.168.5.2:443"),
                         emitted);
         Assertions
                 .assertEquals(GOLDEN_DIGEST_FOR_THE_PINNED_ORDER, targets.digest(),
@@ -185,9 +183,7 @@ class TargetEnumerationTest {
     void rejectsAnAddressWithLeadingZeros() {
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("010.0.0.1", "443", false));
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("10.00.0.1", "443", false));
-        Assertions
-                .assertThrows(ValidationException.class,
-                        () -> TargetEnumeration.of("010.000.000.001", "443", false));
+        Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("010.000.000.001", "443", false));
         // The prefixed form carries the same ambiguity and was not covered by the prefix-less case.
         Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("010.0.0.0/24", "443", false));
     }
@@ -202,11 +198,9 @@ class TargetEnumerationTest {
     @Test
     void rejectsAReversedPortRange() {
         Assertions
-                .assertThrows(IllegalArgumentException.class,
-                        () -> TargetEnumeration.of("10.0.0.1", "443-80", false));
+                .assertThrows(IllegalArgumentException.class, () -> TargetEnumeration.of("10.0.0.1", "443-80", false));
         Assertions
-                .assertThrows(IllegalArgumentException.class,
-                        () -> TargetEnumeration.of("10.0.0.1", "65535-1", false));
+                .assertThrows(IllegalArgumentException.class, () -> TargetEnumeration.of("10.0.0.1", "65535-1", false));
     }
 
     @Test
@@ -235,8 +229,7 @@ class TargetEnumerationTest {
 
     @Test
     void rejectsAMalformedHostEntry() {
-        Assertions
-                .assertThrows(ValidationException.class, () -> TargetEnumeration.of("192.33.168.1.1", "443", false));
+        Assertions.assertThrows(ValidationException.class, () -> TargetEnumeration.of("192.33.168.1.1", "443", false));
     }
 
     @Test

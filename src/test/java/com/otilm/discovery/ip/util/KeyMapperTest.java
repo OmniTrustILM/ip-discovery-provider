@@ -4,13 +4,6 @@ import com.otilm.api.model.common.enums.cryptography.KeyAlgorithm;
 import com.otilm.api.model.common.enums.cryptography.KeyFormat;
 import com.otilm.api.model.common.enums.cryptography.KeyType;
 import com.otilm.api.model.connector.discovery.v2.DiscoveredKeyDto;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-
-import javax.security.auth.x500.X500Principal;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
@@ -26,6 +19,12 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.HexFormat;
 import java.util.Locale;
+import javax.security.auth.x500.X500Principal;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 class KeyMapperTest {
 
@@ -35,7 +34,7 @@ class KeyMapperTest {
                 .getCertificate(new JcaX509v3CertificateBuilder(subject, BigInteger.ONE,
                         Date.from(Instant.now().minus(Duration.ofDays(1))),
                         Date.from(Instant.now().plus(Duration.ofDays(1))), subject, pair.getPublic())
-                                .build(new JcaContentSignerBuilder(signatureAlgorithm).build(pair.getPrivate())));
+                        .build(new JcaContentSignerBuilder(signatureAlgorithm).build(pair.getPrivate())));
     }
 
     private static X509Certificate rsaCertificate(int bits) throws Exception {
@@ -52,8 +51,8 @@ class KeyMapperTest {
 
     /**
      * The fingerprint has to be what the platform correlates on: SHA-256 over the UTF-8 bytes of the base64 SPKI,
-     * lowercase hex. Hashing the DER instead matches nothing, and the symptom is not an error — every discovered key
-     * is reported as newly discovered, forever.
+     * lowercase hex. Hashing the DER instead matches nothing, and the symptom is not an error — every discovered key is
+     * reported as newly discovered, forever.
      */
     @Test
     void fingerprintsTheBase64TextTheWayThePlatformDoes() throws Exception {
@@ -75,9 +74,9 @@ class KeyMapperTest {
     }
 
     /**
-     * A pinned value rather than the recipe run twice. The test above derives its expectation the way the code does,
-     * so a misreading of the recipe satisfies both; this one cannot be satisfied by anything but the recipe Core
-     * uses, since the digest was computed outside this codebase.
+     * A pinned value rather than the recipe run twice. The test above derives its expectation the way the code does, so
+     * a misreading of the recipe satisfies both; this one cannot be satisfied by anything but the recipe Core uses,
+     * since the digest was computed outside this codebase.
      */
     @Test
     void fingerprintMatchesAValueComputedOutsideThisCodebase() throws Exception {
@@ -156,8 +155,8 @@ class KeyMapperTest {
         Constructor<KeyMapper> constructor = KeyMapper.class.getDeclaredConstructor();
         constructor.setAccessible(true);
 
-        InvocationTargetException thrown =
-                Assertions.assertThrows(InvocationTargetException.class, constructor::newInstance);
+        InvocationTargetException thrown = Assertions
+                .assertThrows(InvocationTargetException.class, constructor::newInstance);
         Assertions.assertInstanceOf(IllegalStateException.class, thrown.getCause());
     }
 

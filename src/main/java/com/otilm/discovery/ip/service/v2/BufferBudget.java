@@ -1,25 +1,24 @@
 package com.otilm.discovery.ip.service.v2;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 /**
  * What the undrained results of every live run are allowed to occupy on this node.
  *
  * <p>
- * The buffer is the only true state the connector holds, so it is the only thing that can exhaust it. Production
- * blocks rather than drops when a bound is reached — safe because Core drains from initiate onward rather than at
- * completion, so a drain is always coming — and a wait that outlives the configured window fails the run naming the
- * limit. Silent truncation is never an option: Core would fail the run anyway, with a worse message.
+ * The buffer is the only true state the connector holds, so it is the only thing that can exhaust it. Production blocks
+ * rather than drops when a bound is reached — safe because Core drains from initiate onward rather than at completion,
+ * so a drain is always coming — and a wait that outlives the configured window fails the run naming the limit. Silent
+ * truncation is never an option: Core would fail the run anyway, with a worse message.
  *
  * <p>
  * One lock covers both the per-run and the aggregate accounting. Two would deadlock against each other, and the
@@ -87,9 +86,9 @@ public class BufferBudget {
      * Admits a run to the node's buffer budget.
      *
      * <p>
-     * Refusing at capacity is the point: a run accepted beyond the cap would be starved by the others rather than
-     * told it cannot run. But an already-held run is checked first, and deliberately — reporting it as at-capacity
-     * turns a repeat that must be answered idempotently into a false claim that the node is full.
+     * Refusing at capacity is the point: a run accepted beyond the cap would be starved by the others rather than told
+     * it cannot run. But an already-held run is checked first, and deliberately — reporting it as at-capacity turns a
+     * repeat that must be answered idempotently into a false claim that the node is full.
      */
     public Admission admit(UUID runId) {
         lock.lock();
@@ -156,8 +155,8 @@ public class BufferBudget {
                         // close() detached this holding and signalled. Nothing will ever release against it again,
                         // so the condition cannot become true and the producer would wait out its whole window
                         // after the run it belongs to has already ended.
-                        throw new BufferLimitExceededException("run " + runId
-                                + " was closed while a probe waited for buffer space");
+                        throw new BufferLimitExceededException(
+                                "run " + runId + " was closed while a probe waited for buffer space");
                     }
                 } finally {
                     holding.waiting--;
@@ -238,8 +237,9 @@ public class BufferBudget {
         try {
             Holding holding = holdings.get(runId);
             if (holding != null) {
-                logger.debug("Run {} holds {} items, {} bytes; node holds {} bytes", runId, holding.items,
-                        holding.bytes, totalBytes);
+                logger
+                        .debug("Run {} holds {} items, {} bytes; node holds {} bytes", runId, holding.items,
+                                holding.bytes, totalBytes);
             }
         } finally {
             lock.unlock();

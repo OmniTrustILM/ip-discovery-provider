@@ -10,6 +10,8 @@ import com.otilm.discovery.ip.dao.Certificate;
 import com.otilm.discovery.ip.dao.DiscoveryHistory;
 import com.otilm.discovery.ip.repository.CertificateRepository;
 import jakarta.transaction.Transactional;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,13 +20,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.util.List;
-import java.util.UUID;
-
 /**
- * Covers the synchronous side of the discovery lifecycle - reading a discovery back and deleting
- * it. Anything @Async lives in DiscoveryScanIntegrationTest, which is non-transactional and can
- * therefore assert committed state.
+ * Covers the synchronous side of the discovery lifecycle - reading a discovery back and deleting it. Anything @Async
+ * lives in DiscoveryScanIntegrationTest, which is non-transactional and can therefore assert committed state.
  */
 @SpringBootTest
 @Transactional
@@ -99,16 +97,19 @@ class DiscoveryServiceLifecycleTest {
         storeCertificate("cGFnZS16ZXJv");
         history.setStatus(DiscoveryStatus.COMPLETED);
 
-        Assertions.assertEquals(1, discoveryService.getProviderDtoData(dataRequest(0), history).getCertificateData().size());
+        Assertions
+                .assertEquals(1,
+                        discoveryService.getProviderDtoData(dataRequest(0), history).getCertificateData().size());
     }
 
     @Test
     void deserialisesStoredMetadataOntoTheResponse() {
         history.setStatus(DiscoveryStatus.COMPLETED);
-        history.setMeta("[{\"uuid\":\"872ca286-601f-11ed-9b6a-0242ac120002\",\"name\":\"totalUrls\","
-                + "\"type\":\"meta\",\"contentType\":\"integer\","
-                + "\"content\":[{\"reference\":\"4\",\"data\":4}],"
-                + "\"properties\":{\"label\":\"Total URLs\",\"visible\":true}}]");
+        history
+                .setMeta("[{\"uuid\":\"872ca286-601f-11ed-9b6a-0242ac120002\",\"name\":\"totalUrls\","
+                        + "\"type\":\"meta\",\"contentType\":\"integer\","
+                        + "\"content\":[{\"reference\":\"4\",\"data\":4}],"
+                        + "\"properties\":{\"label\":\"Total URLs\",\"visible\":true}}]");
 
         List<MetadataAttribute> meta = discoveryService.getProviderDtoData(dataRequest(1), history).getMeta();
 
@@ -132,10 +133,14 @@ class DiscoveryServiceLifecycleTest {
         discoveryService.deleteDiscovery(history.getUuid());
 
         Assertions.assertTrue(certificateRepository.findByDiscoveryId(id).isEmpty());
-        Assertions.assertThrows(NotFoundException.class, () -> discoveryHistoryService.getHistoryByUuid(history.getUuid()));
+        Assertions
+                .assertThrows(NotFoundException.class,
+                        () -> discoveryHistoryService.getHistoryByUuid(history.getUuid()));
     }
 
-    /** The delete is a bulk statement, so a wrong predicate would take the whole table and the test above still pass. */
+    /**
+     * The delete is a bulk statement, so a wrong predicate would take the whole table and the test above still pass.
+     */
     @Test
     void deletingADiscoveryLeavesOtherDiscoveriesCertificatesAlone() throws Exception {
         storeCertificate("ZGlzY292ZXJ5LW9uZQ==");
@@ -157,8 +162,9 @@ class DiscoveryServiceLifecycleTest {
 
     @Test
     void deletingAnUnknownDiscoveryReportsNotFound() {
-        Assertions.assertThrows(NotFoundException.class,
-                () -> discoveryService.deleteDiscovery("00000000-0000-0000-0000-000000000000"));
+        Assertions
+                .assertThrows(NotFoundException.class,
+                        () -> discoveryService.deleteDiscovery("00000000-0000-0000-0000-000000000000"));
     }
 
 }

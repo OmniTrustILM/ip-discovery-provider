@@ -3,12 +3,6 @@ package com.otilm.discovery.ip.service.impl;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.InsecureSSL;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
-import javax.net.ssl.HttpsURLConnection;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
@@ -20,6 +14,11 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.HttpsURLConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 // Deliberately not @Transactional: this service performs no persistence, it opens an outbound TLS
 // connection. A transaction here took a pooled database connection for every scanned URL.
@@ -29,8 +28,8 @@ public class ConnectionServiceImpl implements ConnectionService {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionServiceImpl.class);
 
     /**
-     * Closes a probe that has outlived its deadline. One shared daemon thread: it only ever holds the probes in
-     * flight, which the scan bounds by its parallelism, and cancelled entries are dropped rather than left to expire.
+     * Closes a probe that has outlived its deadline. One shared daemon thread: it only ever holds the probes in flight,
+     * which the scan bounds by its parallelism, and cancelled entries are dropped rather than left to expire.
      */
     private static final ScheduledExecutorService DEADLINES = deadlineScheduler();
 
@@ -54,8 +53,8 @@ public class ConnectionServiceImpl implements ConnectionService {
 
     private static void requirePositive(String property, int value) {
         if (value <= 0) {
-            throw new IllegalArgumentException(property + " must be positive, but was " + value
-                    + "; zero means an unbounded wait");
+            throw new IllegalArgumentException(
+                    property + " must be positive, but was " + value + "; zero means an unbounded wait");
         }
     }
 
@@ -77,7 +76,8 @@ public class ConnectionServiceImpl implements ConnectionService {
     }
 
     @Override
-    public ConnectionResponse getCertificates(String url) throws IOException, NoSuchAlgorithmException, KeyManagementException {
+    public ConnectionResponse getCertificates(String url)
+            throws IOException, NoSuchAlgorithmException, KeyManagementException {
 
         logger.info("Requesting the certificate from URL {}", url);
         URL destination = new URL(url);
@@ -128,6 +128,5 @@ public class ConnectionServiceImpl implements ConnectionService {
         logger.debug("Connection to {} terminated", url);
         return new ConnectionResponse(cipher, certs);
     }
-
 
 }
