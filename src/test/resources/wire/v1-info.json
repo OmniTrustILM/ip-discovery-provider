@@ -1,0 +1,147 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : [ {
+    "endPoints" : [ {
+      "context" : "/v1",
+      "method" : "GET",
+      "name" : "listSupportedFunctions",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v1/discoveryProvider/discover",
+      "method" : "POST",
+      "name" : "discoverCertificate",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v1/discoveryProvider/discover/{uuid}",
+      "method" : "DELETE",
+      "name" : "deleteDiscovery",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v1/discoveryProvider/discover/{uuid}",
+      "method" : "POST",
+      "name" : "getDiscovery",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v1/discoveryProvider/{kind}/attributes",
+      "method" : "GET",
+      "name" : "listAttributeDefinitions",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v1/discoveryProvider/{kind}/attributes/validate",
+      "method" : "POST",
+      "name" : "validateAttributes",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v1/health",
+      "method" : "GET",
+      "name" : "checkHealth",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/attributes",
+      "method" : "GET",
+      "name" : "listDefinitions",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/attributes/callback",
+      "method" : "POST",
+      "name" : "callback",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/attributes/{uuid}",
+      "method" : "GET",
+      "name" : "getDefinition",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/attributes",
+      "method" : "GET",
+      "name" : "listRunAttributes",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/discoveries/cancel",
+      "method" : "POST",
+      "name" : "cancel",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/discoveries/initiate",
+      "method" : "POST",
+      "name" : "initiate",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/discoveries/results",
+      "method" : "POST",
+      "name" : "results",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/discoveries/resume",
+      "method" : "POST",
+      "name" : "resume",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/discoveries/status",
+      "method" : "POST",
+      "name" : "status",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/discoveries/stop",
+      "method" : "POST",
+      "name" : "stop",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/resources",
+      "method" : "GET",
+      "name" : "listSupportedResources",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/discoveryProvider/{resource}/attributes",
+      "method" : "GET",
+      "name" : "listResourceAttributes",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/health",
+      "method" : "GET",
+      "name" : "checkHealth",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/health/liveness",
+      "method" : "GET",
+      "name" : "checkHealthLiveness",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/health/readiness",
+      "method" : "GET",
+      "name" : "checkHealthReadiness",
+      "required" : false,
+      "uuid" : null
+    }, {
+      "context" : "/v2/info",
+      "method" : "GET",
+      "name" : "getConnectorInfo",
+      "required" : false,
+      "uuid" : null
+    } ],
+    "functionGroupCode" : "discoveryProvider",
+    "kinds" : [ "IP-Hostname" ]
+  } ]
+}

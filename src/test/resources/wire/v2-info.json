@@ -1,0 +1,34 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "connector" : {
+      "description" : null,
+      "id" : "com.otilm.discovery.ip",
+      "metadata" : null,
+      "name" : "Network Discovery Provider",
+      "version" : "1.7.0-SNAPSHOT"
+    },
+    "interfaces" : [ {
+      "code" : "attributes",
+      "features" : null,
+      "version" : "v2"
+    }, {
+      "code" : "discovery",
+      "features" : [ "discoveryStopResume" ],
+      "version" : "v2"
+    }, {
+      "code" : "health",
+      "features" : null,
+      "version" : "v2"
+    }, {
+      "code" : "info",
+      "features" : null,
+      "version" : "v2"
+    }, {
+      "code" : "metrics",
+      "features" : [ "openMetrics" ],
+      "version" : "v1"
+    } ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "description" : "Connector is online and available to serve requests",
+    "parts" : null,
+    "status" : "ok"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "certificateData" : [ {
+      "base64Content" : "MIIBRjCB7KADAgECAgkAyHyo0WjN3l8wCgYIKoZIzj0EAwMwFjEUMBIGA1UEAxMLd2lyZS1nb2xkZW4wIBcNMjYwMTAxMTE0MTAzWhgPMjEyNTEyMDgxMTQxMDNaMBYxFDASBgNVBAMTC3dpcmUtZ29sZGVuMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECbMqkvmYAG6uHWIR1BbwvvcTXZF99xvjFALoEj2LCNzgfrkhUjz2mK5h09mEvSkWBPPEJn6DTYfK7re0+rRcFKMhMB8wHQYDVR0OBBYEFAUOj2Kf+B5zckCJInji+FjJJJPyMAoGCCqGSM49BAMDA0kAMEYCIQDuLnwUTQB4jOOW/t0WD8d5HMNBN0o41DKN8DIiENTM3wIhAIr5HEgZNbvQAckJvor5K32n8XWbDDnjuxTsXuttmeKT",
+      "meta" : [ {
+        "content" : [ {
+          "data" : "https://127.0.0.1:<port>",
+          "reference" : "https://127.0.0.1:<port>"
+        } ],
+        "contentType" : "string",
+        "description" : "Source from where the certificate is discovered",
+        "name" : "discoverySource",
+        "properties" : {
+          "global" : true,
+          "group" : null,
+          "label" : "Discovery Source",
+          "overwrite" : false,
+          "protectionLevel" : "none",
+          "visible" : true
+        },
+        "type" : "meta",
+        "uuid" : "<uuid>",
+        "version" : 2
+      } ],
+      "uuid" : "<uuid>"
+    } ],
+    "meta" : [ {
+      "content" : [ {
+        "data" : 0,
+        "reference" : "0"
+      } ],
+      "contentType" : "integer",
+      "description" : "Failed certificate discovery URLs",
+      "name" : "failedUrls",
+      "properties" : {
+        "global" : false,
+        "group" : null,
+        "label" : "No Of Failed URLs",
+        "overwrite" : false,
+        "protectionLevel" : "none",
+        "visible" : true
+      },
+      "type" : "meta",
+      "uuid" : "<uuid>",
+      "version" : 2
+    }, {
+      "content" : [ {
+        "data" : 1,
+        "reference" : "1"
+      } ],
+      "contentType" : "integer",
+      "description" : "Successful certificate discovery URLs",
+      "name" : "successUrls",
+      "properties" : {
+        "global" : false,
+        "group" : null,
+        "label" : "No Of Success URLs",
+        "overwrite" : false,
+        "protectionLevel" : "none",
+        "visible" : true
+      },
+      "type" : "meta",
+      "uuid" : "<uuid>",
+      "version" : 2
+    }, {
+      "content" : [ {
+        "data" : 1,
+        "reference" : "1"
+      } ],
+      "contentType" : "integer",
+      "description" : "Total number of URLs for the discovery",
+      "name" : "totalUrls",
+      "properties" : {
+        "global" : false,
+        "group" : null,
+        "label" : "Total URLs",
+        "overwrite" : false,
+        "protectionLevel" : "none",
+        "visible" : true
+      },
+      "type" : "meta",
+      "uuid" : "<uuid>",
+      "version" : 2
+    } ],
+    "name" : "wire",
+    "status" : "completed",
+    "totalCertificatesDiscovered" : 1,
+    "uuid" : "<uuid>"
+  }
+}

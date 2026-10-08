@@ -1,0 +1,18 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "highestSequence" : 1,
+    "progress" : {
+      "byResource" : {
+        "certificates" : {
+          "produced" : 1
+        }
+      },
+      "targetsFailed" : 0,
+      "targetsProcessed" : 1,
+      "targetsTotal" : 1
+    },
+    "state" : "completed"
+  }
+}

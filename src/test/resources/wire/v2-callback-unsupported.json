@@ -1,0 +1,14 @@
+{
+  "status" : 422,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "Attribute data_hosts declares no callback",
+    "errorCode" : "VALIDATION_FAILED",
+    "instance" : "/v2/attributes/callback",
+    "retryable" : false,
+    "status" : 422,
+    "timestamp" : "9999-99-99T99:99:99.9<zone>",
+    "title" : "Validation failed",
+    "type" : "https://docs.otilm.com/problems/common/VALIDATION_FAILED"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "highestSequence" : 1,
+    "items" : [ {
+      "discoveredAt" : "9999-99-99T99:99:99.9<zone>",
+      "meta" : [ {
+        "content" : [ {
+          "contentType" : "string",
+          "data" : "https://127.0.0.1:<port>",
+          "reference" : "https://127.0.0.1:<port>"
+        } ],
+        "contentType" : "string",
+        "description" : "The address and port this item was discovered on",
+        "name" : "meta_discoverySource",
+        "properties" : {
+          "global" : false,
+          "group" : null,
+          "label" : "Discovery source",
+          "overwrite" : false,
+          "protectionLevel" : "none",
+          "visible" : true
+        },
+        "schemaVersion" : "v3",
+        "type" : "meta",
+        "uuid" : "<uuid>",
+        "version" : 3
+      } ],
+      "payload" : {
+        "certificateData" : "MIIBRjCB7KADAgECAgkAyHyo0WjN3l8wCgYIKoZIzj0EAwMwFjEUMBIGA1UEAxMLd2lyZS1nb2xkZW4wIBcNMjYwMTAxMTE0MTAzWhgPMjEyNTEyMDgxMTQxMDNaMBYxFDASBgNVBAMTC3dpcmUtZ29sZGVuMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECbMqkvmYAG6uHWIR1BbwvvcTXZF99xvjFALoEj2LCNzgfrkhUjz2mK5h09mEvSkWBPPEJn6DTYfK7re0+rRcFKMhMB8wHQYDVR0OBBYEFAUOj2Kf+B5zckCJInji+FjJJJPyMAoGCCqGSM49BAMDA0kAMEYCIQDuLnwUTQB4jOOW/t0WD8d5HMNBN0o41DKN8DIiENTM3wIhAIr5HEgZNbvQAckJvor5K32n8XWbDDnjuxTsXuttmeKT",
+        "resource" : "certificates"
+      },
+      "sequence" : 1,
+      "uniqueRef" : "<digest>"
+    } ],
+    "more" : false
+  }
+}
