@@ -1,0 +1,25 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "contentType" : "string",
+    "description" : "Addresses, hostnames, ranges or subnets to scan. One target per entry.",
+    "name" : "data_hosts",
+    "properties" : {
+      "extensibleList" : true,
+      "group" : null,
+      "label" : "Hosts",
+      "list" : true,
+      "multiSelect" : true,
+      "protectionLevel" : "none",
+      "readOnly" : false,
+      "required" : true,
+      "resource" : null,
+      "visible" : true
+    },
+    "schemaVersion" : "v3",
+    "type" : "data",
+    "uuid" : "2cc7b1ee-7656-4844-a651-aed2300b750b",
+    "version" : 3
+  }
+}

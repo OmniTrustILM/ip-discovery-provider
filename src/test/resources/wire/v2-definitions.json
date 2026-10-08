@@ -1,0 +1,117 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "connectorVersion" : "1.7.0-SNAPSHOT",
+    "definitions" : [ {
+      "constraints" : [ {
+        "data" : {
+          "from" : 1,
+          "to" : 100
+        },
+        "description" : "Allowed values for parallel executions",
+        "errorMessage" : "Invalid value for parallel executions, it can be between 1 and 100",
+        "type" : "range"
+      } ],
+      "content" : [ {
+        "contentType" : "integer",
+        "data" : 1,
+        "reference" : null
+      } ],
+      "contentType" : "integer",
+      "description" : "How many probes run at once. Higher finishes sooner and presses the network harder.",
+      "name" : "data_parallelExecutions",
+      "properties" : {
+        "extensibleList" : false,
+        "group" : null,
+        "label" : "Number of parallel executions",
+        "list" : false,
+        "multiSelect" : false,
+        "protectionLevel" : "none",
+        "readOnly" : false,
+        "required" : false,
+        "resource" : null,
+        "visible" : true
+      },
+      "schemaVersion" : "v3",
+      "type" : "data",
+      "uuid" : "8bccc906-1ebc-4ab6-9115-25d5492a9340",
+      "version" : 3
+    }, {
+      "content" : [ {
+        "contentType" : "string",
+        "data" : "1-1024",
+        "reference" : "1-1024"
+      }, {
+        "contentType" : "string",
+        "data" : "1-65535",
+        "reference" : "1-65535"
+      }, {
+        "contentType" : "string",
+        "data" : "443",
+        "reference" : "443"
+      }, {
+        "contentType" : "string",
+        "data" : "8443",
+        "reference" : "8443"
+      } ],
+      "contentType" : "string",
+      "description" : "Ports to probe on each host, as a single port or a range. One per entry; leave empty to scan 443.",
+      "name" : "data_ports",
+      "properties" : {
+        "extensibleList" : true,
+        "group" : null,
+        "label" : "Ports",
+        "list" : true,
+        "multiSelect" : true,
+        "protectionLevel" : "none",
+        "readOnly" : false,
+        "required" : false,
+        "resource" : null,
+        "visible" : true
+      },
+      "schemaVersion" : "v3",
+      "type" : "data",
+      "uuid" : "acc48fc4-803e-45b1-951f-02764abcbbe8",
+      "version" : 3
+    }, {
+      "content" : [ {
+        "contentType" : "text",
+        "data" : "Each entry under **Hosts** is one target, given as any of:\n- IP address (`10.100.2.14`)\n- Hostname (`www.example.com`)\n- IP address range (`10.1.1.20-10.1.1.150`)\n- CIDR subnet (`172.16.1.0/24`)\n\nEach entry under **Ports** is a single port (`443`) or a range (`9000-10000`).\nLeave Ports empty to scan 443.\n\nA scan probes every combination of a host and a port, so a wide subnet with a wide port range is a\nlarge scan: `1-65535` against a `/24` is over sixteen million probes. Narrow either side where you\ncan.\n\nProbes run sequentially unless **Number of parallel executions** is raised, up to 100.\n",
+        "reference" : null
+      } ],
+      "contentType" : "text",
+      "description" : "How a scan is targeted.",
+      "name" : "info_scanTargets",
+      "properties" : {
+        "group" : null,
+        "label" : "Targeting a scan",
+        "visible" : true
+      },
+      "schemaVersion" : "v3",
+      "type" : "info",
+      "uuid" : "7f412886-f7de-4a0b-babc-43eaf40bfdf4",
+      "version" : 3
+    }, {
+      "contentType" : "string",
+      "description" : "Addresses, hostnames, ranges or subnets to scan. One target per entry.",
+      "name" : "data_hosts",
+      "properties" : {
+        "extensibleList" : true,
+        "group" : null,
+        "label" : "Hosts",
+        "list" : true,
+        "multiSelect" : true,
+        "protectionLevel" : "none",
+        "readOnly" : false,
+        "required" : true,
+        "resource" : null,
+        "visible" : true
+      },
+      "schemaVersion" : "v3",
+      "type" : "data",
+      "uuid" : "2cc7b1ee-7656-4844-a651-aed2300b750b",
+      "version" : 3
+    } ]
+  }
+}
