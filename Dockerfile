@@ -1,3 +1,6 @@
+# --build-context m2=$HOME/.m2/repository replaces this empty stage; without it Maven downloads every dependency
+FROM scratch AS m2
+
 # Build stage
 FROM maven:3.9.16-eclipse-temurin-21 AS build
 
@@ -10,7 +13,7 @@ COPY docker /home/app/docker
 # same main/tag push, so nothing else stops a failing build from being published: skipping tests
 # here would let the publish job push and sign an image while the test workflow is still running
 # or already red. This stage is the only thing gating that.
-RUN mvn -f /home/app/pom.xml clean package
+RUN --mount=type=bind,from=m2,target=/root/.m2/repository,rw mvn -f /home/app/pom.xml clean package
 
 # Optimize stage
 FROM eclipse-temurin:21-jdk-alpine AS optimize
