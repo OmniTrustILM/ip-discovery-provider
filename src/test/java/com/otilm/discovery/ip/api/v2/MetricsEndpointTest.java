@@ -3,9 +3,10 @@ package com.otilm.discovery.ip.api.v2;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -19,7 +20,8 @@ import org.springframework.http.ResponseEntity;
  * proves the property names and the served format rather than the shipped values.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureObservability // Boot turns metrics export off under test; without this the scrape endpoint is absent.
+@AutoConfigureTestRestTemplate
+@AutoConfigureMetrics // Boot turns metrics export off under test; without this the scrape endpoint is absent.
 class MetricsEndpointTest {
 
     @Autowired

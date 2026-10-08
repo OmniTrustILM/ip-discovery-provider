@@ -45,7 +45,7 @@ class ProblemDetailsHandlingAdviceTest {
     void reportsAValidationFailureAs422() {
         ProblemDetail problem = advice.handleValidation(new ValidationException("bad spec"));
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), problem.getStatus());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT.value(), problem.getStatus());
         Assertions.assertEquals("bad spec", problem.getDetail());
     }
 
@@ -60,7 +60,7 @@ class ProblemDetailsHandlingAdviceTest {
                 .handleIllegalArgument(new IllegalArgumentException(
                         "Cannot invoke \"com.otilm.discovery.ip.util.TargetEnumeration.size()\" because it is null"));
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), problem.getStatus());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT.value(), problem.getStatus());
         Assertions
                 .assertFalse(problem.getDetail().contains("com.otilm"),
                         "a library's message names internals and must not reach the wire: " + problem.getDetail());
@@ -75,7 +75,7 @@ class ProblemDetailsHandlingAdviceTest {
     void namesTheRejectedValueWithoutTheTargetTypeItFailedToConvertTo() {
         ProblemDetail problem = advice.handleUnconvertibleArgument(mismatch("resource", "wibble"));
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), problem.getStatus());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT.value(), problem.getStatus());
         Assertions.assertTrue(problem.getDetail().contains("wibble"), problem.getDetail());
         Assertions.assertTrue(problem.getDetail().contains("resource"), problem.getDetail());
         Assertions
@@ -181,7 +181,7 @@ class ProblemDetailsHandlingAdviceTest {
         ProblemDetail problem = advice
                 .handlePastPointOfNoReturn(new RunPastPointOfNoReturnException(UUID.randomUUID(), "Completed"));
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY.value(), problem.getStatus());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT.value(), problem.getStatus());
         Assertions.assertEquals(ErrorCode.OPERATION_PAST_POINT_OF_NO_RETURN, errorCodeOf(problem));
         Assertions.assertTrue(problem.getDetail().contains("Completed"), problem.getDetail());
     }
