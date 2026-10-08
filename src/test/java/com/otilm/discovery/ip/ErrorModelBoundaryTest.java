@@ -4,8 +4,9 @@ import com.otilm.api.model.common.error.ErrorCode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import org.springframework.http.ResponseEntity;
  * boundary itself is explained on {@link com.otilm.discovery.ip.ProblemDetailsHandlingAdvice}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureTestRestTemplate
 class ErrorModelBoundaryTest {
 
     @Autowired
@@ -26,7 +28,7 @@ class ErrorModelBoundaryTest {
     void answersAV2FailureWithProblemJson() {
         ResponseEntity<String> response = rest.getForEntity("/v2/discoveryProvider/secrets/attributes", String.class);
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, response.getStatusCode());
         Assertions
                 .assertTrue(
                         response.getHeaders().getContentType().equalsTypeAndSubtype(MediaType.APPLICATION_PROBLEM_JSON),
@@ -68,7 +70,7 @@ class ErrorModelBoundaryTest {
     void answersTheSameFailureOnV1WithTheV1ErrorShape() {
         ResponseEntity<String> response = rest.getForEntity("/v1/discoveryProvider/Nonsense/attributes", String.class);
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, response.getStatusCode());
         Assertions
                 .assertTrue(response.getBody().startsWith("["),
                         "v1 answers a validation failure with its own array of descriptions: " + response.getBody());
@@ -94,7 +96,7 @@ class ErrorModelBoundaryTest {
     void rejectsAPathThatNamesNoResourceAtAll() {
         ResponseEntity<String> response = rest.getForEntity("/v2/discoveryProvider/nonsense/attributes", String.class);
 
-        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, response.getStatusCode());
     }
 
     @Test

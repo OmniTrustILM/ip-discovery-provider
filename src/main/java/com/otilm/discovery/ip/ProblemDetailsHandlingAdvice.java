@@ -58,7 +58,7 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
         LOG.error("Validation error occurred: {}", message, ex);
         return new ResponseEntity<>(
                 ProblemDetailExtended.fromErrorCode(ErrorCode.VALIDATION_FAILED, message, null, null), headers,
-                HttpStatus.UNPROCESSABLE_ENTITY);
+                HttpStatus.UNPROCESSABLE_CONTENT);
     }
 
     /**
