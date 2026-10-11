@@ -3,7 +3,9 @@ package com.otilm.discovery.ip.util;
 import com.otilm.api.exception.ValidationException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -105,6 +107,12 @@ class TargetEnumerationTest {
         Assertions
                 .assertEquals(TargetEnumeration.of("10.0.0.1", "80,443", false).digest(),
                         TargetEnumeration.of("10.0.0.1", "443,80", false).digest());
+        Assertions
+                .assertEquals(TargetEnumeration.of("10.0.0.5", "443", false).digest(),
+                        TargetEnumeration.of("10.0.0.5/32", "443", false).digest());
+        Assertions
+                .assertEquals(TargetEnumeration.of("10.0.0.0-10.0.0.1", "443", false).digest(),
+                        TargetEnumeration.of("10.0.0.0/31", "443", false).digest());
     }
 
     @Test
@@ -114,6 +122,53 @@ class TargetEnumerationTest {
         Assertions.assertNotEquals(base, TargetEnumeration.of("10.0.0.2", "443", false).digest());
         Assertions.assertNotEquals(base, TargetEnumeration.of("10.0.0.1", "8443", false).digest());
         Assertions.assertNotEquals(base, TargetEnumeration.of("10.0.0.1", "443", true).digest());
+    }
+
+    // --- subnets ---
+
+    /** A host entry that validation accepts must scan something; one that enumerates to nothing is silently dropped. */
+    @Test
+    void everyAcceptedHostEntryContributesItsHosts() {
+        Map<String, Long> hostsPerEntry = new LinkedHashMap<>();
+        hostsPerEntry.put("10.0.0.1", 1L);
+        hostsPerEntry.put("10.0.0.1-10.0.0.3", 3L);
+        hostsPerEntry.put("host.example.com", 1L);
+        hostsPerEntry.put("10.0.0.0/32", 1L);
+        hostsPerEntry.put("10.0.0.0/31", 2L);
+        hostsPerEntry.put("10.0.0.0/30", 2L);
+        hostsPerEntry.put("10.0.0.0/29", 6L);
+        hostsPerEntry.put("10.0.0.0/24", 254L);
+
+        hostsPerEntry
+                .forEach((entry, hosts) -> Assertions
+                        .assertEquals(hosts, TargetEnumeration.of(entry, "443", false).size(), entry));
+    }
+
+    @Test
+    void enumeratesASlash32AsTheHostItNames() {
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.5/32", "443", false);
+
+        Assertions.assertEquals(1L, targets.size());
+        Assertions.assertEquals("https://10.0.0.5:443", targets.target(0));
+    }
+
+    /** RFC 3021: a /31 is a point-to-point link with no network or broadcast address, so both addresses are hosts. */
+    @Test
+    void enumeratesBothAddressesOfASlash31() {
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1/31", "443", false);
+
+        Assertions.assertEquals(2L, targets.size());
+        Assertions.assertEquals("https://10.0.0.0:443", targets.target(0));
+        Assertions.assertEquals("https://10.0.0.1:443", targets.target(1));
+    }
+
+    @Test
+    void keepsASlash32BesideABareAddress() {
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1,10.0.0.8/32", "443", false);
+
+        Assertions.assertEquals(2L, targets.size());
+        Assertions.assertEquals("https://10.0.0.1:443", targets.target(0));
+        Assertions.assertEquals("https://10.0.0.8:443", targets.target(1));
     }
 
     // --- overlap ---
