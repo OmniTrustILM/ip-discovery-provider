@@ -21,7 +21,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
@@ -35,7 +34,6 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,8 +80,6 @@ public class ScanRunner {
      */
     private final AtomicReference<ChunkTally> inFlightChunk = new AtomicReference<>();
 
-    /** Run-level failure reasons, accumulated across chunks so the summary describes the whole sweep. */
-    private final Map<String, AtomicLong> failureReasons = new java.util.concurrent.ConcurrentHashMap<>();
     private final List<Future<?>> inFlight = new ArrayList<>();
 
     public ScanRunner(UUID runId, TargetEnumeration targets, ResultBuffer buffer, RunRegistry registry,
@@ -174,6 +170,12 @@ public class ScanRunner {
         return tally == null ? 0L : tally.failed.get();
     }
 
+    /** Targets among them that held nothing to discover, counted the same way. */
+    public long inFlightEmpty() {
+        ChunkTally tally = inFlightChunk.get();
+        return tally == null ? 0L : tally.empty.get();
+    }
+
     /** @return the chunk's tally, or null if a stop interrupted it before every probe finished */
     private ChunkTally runChunk(ExecutorService probes, Semaphore concurrency, long from, long to) {
         ChunkTally tally = new ChunkTally();
@@ -235,6 +237,9 @@ public class ScanRunner {
                 emit(certificate, url, tally);
             }
             tally.processed.incrementAndGet();
+            if (response.getCertificates().length == 0) {
+                tally.empty.incrementAndGet();
+            }
         } catch (InterruptedException e) {
             // A stop reaches a probe parked on backpressure exactly here. Nothing is counted: the cursor has not
             // advanced past this chunk, so the target is scanned again on resume.
@@ -247,15 +252,19 @@ public class ScanRunner {
             }
             stop();
         } catch (ItemNotMappedException e) {
-            // The reason is already recorded, against the mapping rather than the probe. Counted the same way a
-            // target that never answered is, since nothing usable came of it either way.
+            // The reason is already recorded, against the mapping rather than the probe. Failed rather than empty:
+            // the target answered with a certificate, and it is this connector that could not use it.
             tally.processed.incrementAndGet();
             tally.failed.incrementAndGet();
         } catch (Exception e) {
-            logger.debug("Probe of {} in run {} failed: {}", url, runId, e.getMessage());
-            recordFailure(tally, e.getClass().getSimpleName());
+            logger.debug("Probe of {} in run {} ended without certificates: {}", url, runId, e.getMessage());
             tally.processed.incrementAndGet();
-            tally.failed.incrementAndGet();
+            if (TargetOutcome.ofProbeFailure(e) == TargetOutcome.EMPTY) {
+                tally.empty.incrementAndGet();
+            } else {
+                recordFailure(tally, e.getClass().getSimpleName());
+                tally.failed.incrementAndGet();
+            }
         } finally {
             concurrency.release();
         }
@@ -309,7 +318,7 @@ public class ScanRunner {
         }
     }
 
-    /** Carries a mapping fault out to the probe, which counts the target the same way it counts an unreachable one. */
+    /** Carries a mapping fault out to the probe, which counts the target as failed. */
     private static final class ItemNotMappedException extends RuntimeException {
         private ItemNotMappedException(Throwable cause) {
             super(cause);
@@ -322,21 +331,30 @@ public class ScanRunner {
 
     /**
      * The reasons this run's targets failed, commonest first, as "{@code 4094 x SSLHandshakeException}". Without it a
-     * range that is not listening, a TLS stack refusing a bare IP and a bug here all print the same number.
+     * TLS stack refusing a bare IP and a bug here print the same number.
      */
     String failureSummary() {
-        if (failureReasons.isEmpty()) {
+        return registry.find(runId).map(handle -> summaryOf(handle.failedByReason())).orElse("");
+    }
+
+    private static String summaryOf(Map<String, Long> reasons) {
+        if (reasons.isEmpty()) {
             return "";
         }
-        return ": " + failureReasons
+        return ": " + String.join(", ", byFrequency(reasons, TOP_FAILURE_REASONS));
+    }
+
+    /**
+     * The reasons as "{@code 4094 x SSLHandshakeException}", commonest first and then by name, at most {@code limit}.
+     */
+    static List<String> byFrequency(Map<String, Long> reasons, int limit) {
+        return reasons
                 .entrySet()
                 .stream()
-                .sorted(Map.Entry
-                        .<String, AtomicLong>comparingByValue(Comparator.comparingLong(AtomicLong::get))
-                        .reversed())
-                .limit(TOP_FAILURE_REASONS)
-                .map(reason -> reason.getValue().get() + " x " + reason.getKey())
-                .collect(Collectors.joining(", "));
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .limit(limit)
+                .map(reason -> reason.getValue() + " x " + reason.getKey())
+                .toList();
     }
 
     /**
@@ -344,10 +362,6 @@ public class ScanRunner {
      * double-count the interrupted chunk when a resumed run scans it again.
      */
     private void commit(long cursor, ChunkTally tally) {
-        tally.failures
-                .forEach((reason, count) -> failureReasons
-                        .computeIfAbsent(reason, key -> new AtomicLong())
-                        .addAndGet(count.get()));
         registry.update(runId, handle -> {
             // A chunk finishing after a stop was recorded must not move the checkpoint: the stop has already
             // answered with one, and Core would be left holding a handle the connector had moved past.
@@ -357,14 +371,17 @@ public class ScanRunner {
             }
             Map<String, Long> merged = new HashMap<>(handle.yieldByResource());
             tally.byResource.forEach((resource, count) -> merged.merge(resource, count.get(), Long::sum));
+            Map<String, Long> reasons = new HashMap<>(handle.failedByReason());
+            tally.failures.forEach((reason, count) -> reasons.merge(reason, count.get(), Long::sum));
             return new RunHandle(handle.state(), cursor, buffer.highestSequence(), handle.targetsDigest(),
                     handle.targetsProcessed() + tally.processed.get(), handle.targetsFailed() + tally.failed.get(),
-                    Map.copyOf(merged));
+                    handle.targetsEmpty() + tally.empty.get(), Map.copyOf(merged), Map.copyOf(reasons));
         })
                 .ifPresent(committed -> logger
                         // Per chunk rather than per target: a wide sweep is otherwise silent for its whole duration.
-                        .info("Run {} at {}/{} targets ({} failed{}), {} items held", runId, committed.cursorIndex(),
-                                targets.size(), committed.targetsFailed(), failureSummary(), buffer.held()));
+                        .info("Run {} at {}/{} targets ({} empty, {} failed{}), {} items held", runId,
+                                committed.cursorIndex(), targets.size(), committed.targetsEmpty(),
+                                committed.targetsFailed(), summaryOf(committed.failedByReason()), buffer.held()));
     }
 
     private static void counted(ChunkTally tally, Resource resource) {
@@ -448,6 +465,7 @@ public class ScanRunner {
     private static final class ChunkTally {
         private final AtomicLong processed = new AtomicLong();
         private final AtomicLong failed = new AtomicLong();
+        private final AtomicLong empty = new AtomicLong();
         private final Map<String, AtomicLong> byResource = new java.util.concurrent.ConcurrentHashMap<>();
         /** Why targets failed in this chunk, keyed by exception name; merged into the run's totals at the boundary. */
         private final Map<String, AtomicLong> failures = new java.util.concurrent.ConcurrentHashMap<>();

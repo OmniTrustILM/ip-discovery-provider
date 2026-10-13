@@ -23,7 +23,8 @@ class RunHandleTest {
     private static RunHandle handle() {
         // Cursor and processed count match, as every committed chunk leaves them, and both run past an int.
         return new RunHandle(RunHandle.RunState.RUNNING, 4_000_000_000L, 987_654_321L,
-                "b1946ac92492d2347c6235b4d2611184", 4_000_000_000L, 12L, Map.of("certificates", 42L, "keys", 7L));
+                "b1946ac92492d2347c6235b4d2611184", 4_000_000_000L, 12L, 0L, Map.of("certificates", 42L, "keys", 7L),
+                Map.of());
     }
 
     private static MetadataAttribute foreignAttribute() {
@@ -175,7 +176,7 @@ class RunHandleTest {
         other.setContentType(AttributeContentType.STRING);
         other.setContent(List.of(new StringAttributeContentV3("x")));
 
-        RunHandle handle = new RunHandle(RunHandle.RunState.STOPPED, 4, 40, "digest", 4, 1, Map.of());
+        RunHandle handle = new RunHandle(RunHandle.RunState.STOPPED, 4, 40, "digest", 4, 1, 0, Map.of(), Map.of());
         List<MetadataAttribute> meta = new java.util.ArrayList<>(List.of(other));
         meta.addAll(handle.encode());
 
@@ -223,6 +224,37 @@ class RunHandleTest {
                 + "\"targetsDigest\":\"d\",\"targetsProcessed\":0,\"targetsFailed\":0}");
 
         Assertions.assertEquals(Map.of(), handle.yieldByResource());
+    }
+
+    @Test
+    void carriesEmptyTargetsAndWhyTargetsFailedThroughTheEnvelope() {
+        RunHandle handle = new RunHandle(RunHandle.RunState.STOPPED, 10L, 3L, "digest", 10L, 2L, 7L, Map.of(),
+                Map.of("SSLHandshakeException", 2L));
+
+        RunHandle read = RunHandle.from(handle.encode()).orElseThrow();
+
+        Assertions.assertEquals(7L, read.targetsEmpty());
+        Assertions.assertEquals(Map.of("SSLHandshakeException", 2L), read.failedByReason());
+    }
+
+    /** A checkpoint an older connector wrote counted every outcome it had; it resumes rather than failing the run. */
+    @Test
+    void readsACheckpointWrittenBeforeEmptyTargetsWereCounted() {
+        RunHandle handle = decode("{\"state\":\"STOPPED\",\"cursorIndex\":4,\"sequenceHighWater\":0,"
+                + "\"targetsDigest\":\"d\",\"targetsProcessed\":4,\"targetsFailed\":4,\"yieldByResource\":{}}");
+
+        Assertions.assertEquals(0L, handle.targetsEmpty());
+        Assertions.assertEquals(Map.of(), handle.failedByReason());
+    }
+
+    @Test
+    void refusesACheckpointWhoseOutcomesOutnumberItsTargets() {
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":4,\"sequenceHighWater\":0,"
+                                + "\"targetsDigest\":\"d\",\"targetsProcessed\":4,\"targetsFailed\":2,"
+                                + "\"targetsEmpty\":3}"),
+                        "an empty target is never a failed one too, so the two cannot exceed the work");
     }
 
     /** Built outside the assertion lambda so only the call under test can throw from inside it. */

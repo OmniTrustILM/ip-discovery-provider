@@ -90,8 +90,8 @@ class RunRebuildTest {
     }
 
     private static RunHandle stoppedHandle(long cursor, long highWater) {
-        return new RunHandle(RunHandle.RunState.STOPPED, cursor, highWater, digest(), cursor, 0L,
-                Map.of(Resource.CERTIFICATE.getCode(), highWater));
+        return new RunHandle(RunHandle.RunState.STOPPED, cursor, highWater, digest(), cursor, 0L, 0L,
+                Map.of(Resource.CERTIFICATE.getCode(), highWater), Map.of());
     }
 
     private static DiscoveryRunRequestDto runRequest(UUID runId, RunHandle handle, String hosts) {
@@ -165,7 +165,7 @@ class RunRebuildTest {
     @Test
     void refusesToRebuildARunningHandle() {
         UUID runId = UUID.randomUUID();
-        RunHandle running = new RunHandle(RunHandle.RunState.RUNNING, 0L, 0L, digest(), 0L, 0L, Map.of());
+        RunHandle running = new RunHandle(RunHandle.RunState.RUNNING, 0L, 0L, digest(), 0L, 0L, 0L, Map.of(), Map.of());
 
         var request = runRequest(runId, running, HOSTS);
         Assertions.assertThrows(UnknownRunException.class, () -> service.status(request));

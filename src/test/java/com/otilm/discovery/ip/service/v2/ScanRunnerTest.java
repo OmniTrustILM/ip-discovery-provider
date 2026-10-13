@@ -7,6 +7,7 @@ import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.cert.CertificateEncodingException;
@@ -93,7 +94,14 @@ class ScanRunnerTest {
     private static class AlwaysFails implements ConnectionService {
         @Override
         public ConnectionResponse getCertificates(String url) throws IOException {
-            throw new IOException("nothing listening");
+            throw new IOException("no usable answer");
+        }
+    }
+
+    private static class NothingListening implements ConnectionService {
+        @Override
+        public ConnectionResponse getCertificates(String url) throws IOException {
+            throw new ConnectException("Connection refused");
         }
     }
 
@@ -214,8 +222,8 @@ class ScanRunnerTest {
         BufferBudget budget = roomyBudget();
 
         registry
-                .register(runId, new RunHandle(RunHandle.RunState.RUNNING, 8L, 8L, targets.digest(), 8L, 0L,
-                        Map.of(Resource.CERTIFICATE.getCode(), 8L)));
+                .register(runId, new RunHandle(RunHandle.RunState.RUNNING, 8L, 8L, targets.digest(), 8L, 0L, 0L,
+                        Map.of(Resource.CERTIFICATE.getCode(), 8L), Map.of()));
         ResultBuffer buffer = openBuffer(runId, budget, 8L);
         AlwaysAnswers probes = new AlwaysAnswers();
 
@@ -240,7 +248,9 @@ class ScanRunnerTest {
     void doesNothingWhenTheCursorIsAlreadyAtTheEnd() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
-        registry.register(runId, new RunHandle(RunHandle.RunState.RUNNING, 4L, 4L, targets.digest(), 4L, 0L, Map.of()));
+        registry
+                .register(runId, new RunHandle(RunHandle.RunState.RUNNING, 4L, 4L, targets.digest(), 4L, 0L, 0L,
+                        Map.of(), Map.of()));
         ResultBuffer buffer = openBuffer(runId, roomyBudget(), 4L);
         AlwaysAnswers probes = new AlwaysAnswers();
 
@@ -383,6 +393,53 @@ class ScanRunnerTest {
     }
 
     @Test
+    void countsATargetWithNothingListeningAsEmptyRatherThanFailed() {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+        ScanRunner runner = runner(runId, targets, buffer, new NothingListening(), 4);
+
+        runner.scan();
+
+        RunHandle handle = registry.find(runId).orElseThrow();
+        Assertions.assertEquals(4, handle.targetsProcessed());
+        Assertions.assertEquals(4, handle.targetsEmpty());
+        Assertions.assertEquals(0, handle.targetsFailed(), "an address with nothing on it is not a failure");
+        Assertions.assertEquals(Map.of(), handle.failedByReason());
+    }
+
+    @Test
+    void countsATlsAnswerWithoutCertificatesAsEmpty() {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+        ScanRunner runner = runner(runId, targets, buffer,
+                url -> new ConnectionResponse("TLS_AES_256_GCM_SHA384", new X509Certificate[0]), 4);
+
+        runner.scan();
+
+        RunHandle handle = registry.find(runId).orElseThrow();
+        Assertions.assertEquals(4, handle.targetsEmpty());
+        Assertions.assertEquals(0, handle.targetsFailed());
+    }
+
+    /** The reasons travel in the checkpoint, so a run resumed on a fresh runner still says why its targets failed. */
+    @Test
+    void keepsWhyTargetsFailedInTheCheckpoint() {
+        UUID runId = UUID.randomUUID();
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
+        registry.register(runId, RunHandle.initial(targets.digest()));
+        ResultBuffer buffer = openBuffer(runId, roomyBudget(), 0);
+        ScanRunner runner = runner(runId, targets, buffer, new AlwaysFails(), 4);
+
+        runner.scan();
+
+        Assertions.assertEquals(Map.of("IOException", 4L), registry.find(runId).orElseThrow().failedByReason());
+    }
+
+    @Test
     void summarisesTheDominantFailureReason() {
         UUID runId = UUID.randomUUID();
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
@@ -399,8 +456,8 @@ class ScanRunnerTest {
 
     /**
      * A certificate this connector cannot map is its own defect, and it must not read as a target that did not answer.
-     * Both end the target as failed -- nothing usable came of it either way -- but the reason distinguishes them, so a
-     * mapping that throws for every certificate cannot hide inside an unreachable-looking sweep.
+     * The target answered, so it fails rather than counting as empty, and the reason marks the failure as this
+     * connector's, so a mapping that throws for every certificate cannot pass for a TLS stack refusing the probe.
      */
     @Test
     void tellsACertificateItCannotMapFromATargetThatNeverAnswered() throws Exception {
@@ -421,7 +478,7 @@ class ScanRunnerTest {
                         "an item this connector could not build is marked as ours");
         RunHandle handle = registry.find(runId).orElseThrow();
         Assertions.assertEquals(4, handle.targetsProcessed());
-        Assertions.assertEquals(4, handle.targetsFailed(), "nothing usable came of the target either way");
+        Assertions.assertEquals(4, handle.targetsFailed(), "the target answered; this connector could not use it");
         Assertions.assertEquals(0, buffer.held());
     }
 

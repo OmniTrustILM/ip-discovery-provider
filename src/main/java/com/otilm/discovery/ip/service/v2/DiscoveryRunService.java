@@ -1,6 +1,13 @@
 package com.otilm.discovery.ip.service.v2;
 
 import com.otilm.api.exception.ValidationException;
+import com.otilm.api.model.common.attribute.common.AttributeType;
+import com.otilm.api.model.common.attribute.common.MetadataAttribute;
+import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
+import com.otilm.api.model.common.attribute.common.properties.MetadataAttributeProperties;
+import com.otilm.api.model.common.attribute.v3.MetadataAttributeV3;
+import com.otilm.api.model.common.attribute.v3.content.BaseAttributeContentV3;
+import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryDrainRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryInitiateRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryInitiateResponseDto;
@@ -147,12 +154,10 @@ public class DiscoveryRunService {
         registry.touch(runId);
 
         DiscoveryStatusResponseDto response = new DiscoveryStatusResponseDto();
-        // meta is left unset, which the contract reads as "no change" rather than "clear what you hold". This
-        // connector has nothing to put there: everything it knows about a run is a count, and counts belong in
-        // progress as typed fields Core can compute with.
         response.setState(registry.state(runId).orElse(DiscoveryRunState.RUNNING));
         response.setHighestSequence(registry.buffer(runId).map(ResultBuffer::highestSequence).orElse(0L));
         response.setProgress(progressOf(runId));
+        response.setMeta(failureReasonsOf(runId));
         return response;
     }
 
@@ -462,6 +467,46 @@ public class DiscoveryRunService {
         }
     }
 
+    /** Stable across versions: Core replaces the run's metadata by this definition on every answer carrying it. */
+    static final String FAILURE_REASONS_UUID = "8d3f2c6e-5a41-4b9e-a7c2-1e6f0b9d4a53";
+
+    /** Enough to name every kind of failure a sweep meets, and a bound on what one answer carries. */
+    private static final int MAX_FAILURE_REASONS = 10;
+
+    /**
+     * Why targets failed, as metadata an operator reads beside the run, commonest first. Counts alone cannot say
+     * whether a range refused this client or this connector could not use what it was given. Left out while nothing has
+     * failed, which the contract reads as "no change" rather than "clear what you hold"; failures only ever add up, so
+     * there is nothing to clear.
+     */
+    private List<MetadataAttribute> failureReasonsOf(UUID runId) {
+        Map<String, Long> reasons = registry.find(runId).map(RunHandle::failedByReason).orElse(Map.of());
+        if (reasons.isEmpty()) {
+            return null;
+        }
+        MetadataAttributeV3 attribute = new MetadataAttributeV3();
+        attribute.setUuid(FAILURE_REASONS_UUID);
+        attribute.setName("meta_targetFailureReasons");
+        attribute.setType(AttributeType.META);
+        attribute.setContentType(AttributeContentType.STRING);
+        attribute.setDescription("Why the targets this discovery could not read failed, and how often");
+
+        MetadataAttributeProperties properties = new MetadataAttributeProperties();
+        properties.setLabel("Why targets failed");
+        properties.setVisible(true);
+        properties.setGlobal(false);
+        attribute.setProperties(properties);
+
+        attribute
+                .setContent(ScanRunner
+                        .byFrequency(reasons, MAX_FAILURE_REASONS)
+                        .stream()
+                        .map(StringAttributeContentV3::new)
+                        .map(BaseAttributeContentV3.class::cast)
+                        .toList());
+        return List.of(attribute);
+    }
+
     /**
      * Work in targets, yield in items, and nothing at all when there is nothing to say.
      *
@@ -485,10 +530,12 @@ public class DiscoveryRunService {
         // Failures first. A failing probe counts itself processed before it counts itself failed, so reading in
         // that order cannot see a failure whose processed increment has not landed yet.
         long inFlightFailed = registry.runner(runId).map(ScanRunner::inFlightFailed).orElse(0L);
+        long inFlightEmpty = registry.runner(runId).map(ScanRunner::inFlightEmpty).orElse(0L);
         long inFlightProcessed = registry.runner(runId).map(ScanRunner::inFlightProcessed).orElse(0L);
 
         long processed = handle.targetsProcessed() + inFlightProcessed;
         long failed = handle.targetsFailed() + inFlightFailed;
+        long empty = handle.targetsEmpty() + inFlightEmpty;
         // The checkpoint and the chunk are read a moment apart, and a commit between them moves one into the other.
         // Clamped rather than locked: this figure is advisory and recomputed on every poll, so a sample that is
         // briefly stale costs nothing, while one reporting more targets than the run has -- or more failures than
@@ -497,13 +544,15 @@ public class DiscoveryRunService {
             processed = Math.min(processed, total);
         }
         failed = Math.min(failed, processed);
+        empty = Math.min(empty, processed - failed);
 
         DiscoveryProgressDto progress = new DiscoveryProgressDto();
         progress.setTargetsTotal(total);
         progress.setTargetsProcessed(processed);
-        // Counted within processed rather than beside it, so an all-failed sweep still reaches 100 per cent. A run
-        // that reached every target and found nothing listening is complete, not degraded.
+        // Both counted within processed rather than beside it, so a sweep that found nothing listening still reaches
+        // 100 per cent. Such a run is complete, not degraded: its targets are empty, not failed.
         progress.setTargetsFailed(failed);
+        progress.setTargetsEmpty(empty);
         // Named only when it explains a run that looks stalled; a phase on a healthy run is noise Core would keep.
         progress.setPhase(budget.isBackpressured(runId) ? "backpressured" : null);
 

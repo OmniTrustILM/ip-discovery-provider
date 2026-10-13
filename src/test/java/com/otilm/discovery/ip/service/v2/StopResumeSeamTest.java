@@ -239,7 +239,7 @@ class StopResumeSeamTest {
             throw new java.io.IOException("nothing listening");
         });
         RunHandle checkpoint = new RunHandle(RunHandle.RunState.STOPPED, 4L, 40L,
-                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, java.util.Map.of());
+                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, 0L, java.util.Map.of(), java.util.Map.of());
 
         service.resume(runRequest(runId, checkpoint.encode()));
 
@@ -261,7 +261,7 @@ class StopResumeSeamTest {
             throw new java.io.IOException("nothing listening");
         });
         RunHandle checkpoint = new RunHandle(RunHandle.RunState.STOPPED, 4L, 40L,
-                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, java.util.Map.of());
+                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, 0L, java.util.Map.of(), java.util.Map.of());
 
         service.status(runRequest(runId, checkpoint.encode()));
 

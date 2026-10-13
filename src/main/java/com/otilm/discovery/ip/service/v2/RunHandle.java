@@ -31,11 +31,14 @@ import java.util.Optional;
  * @param sequenceHighWater highest sequence assigned; a resumed run continues this space and never restarts it
  * @param targetsDigest the resume guard: any change to enumeration order invalidates it, and the run is refused loudly
  * rather than resumed at the wrong offset
+ * @param targetsEmpty targets that held nothing to discover, never also counted in {@code targetsFailed}
  * @param yieldByResource items produced per resource wire code, so per-resource progress survives a stop
+ * @param failedByReason why targets failed, so a resumed run still explains failures from before its stop
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater, String targetsDigest,
-        long targetsProcessed, long targetsFailed, Map<String, Long> yieldByResource) {
+        long targetsProcessed, long targetsFailed, long targetsEmpty, Map<String, Long> yieldByResource,
+        Map<String, Long> failedByReason) {
 
     /** Stable across versions: Core replays what it was given, and a rename would orphan every live checkpoint. */
     public static final String ATTRIBUTE_UUID = "52cf88e4-6b87-40f5-a89d-9b6e6d676119";
@@ -56,7 +59,7 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
 
     /** The handle a run starts from, before a single target has been probed. */
     public static RunHandle initial(String targetsDigest) {
-        return new RunHandle(RunState.RUNNING, 0L, 0L, targetsDigest, 0L, 0L, Map.of());
+        return new RunHandle(RunState.RUNNING, 0L, 0L, targetsDigest, 0L, 0L, 0L, Map.of(), Map.of());
     }
 
     /**
@@ -67,12 +70,12 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
      */
     public RunHandle stoppedAt(long sequenceHighWater) {
         return new RunHandle(RunState.STOPPED, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed,
-                targetsFailed, yieldByResource);
+                targetsFailed, targetsEmpty, yieldByResource, failedByReason);
     }
 
     public RunHandle withState(RunState newState) {
         return new RunHandle(newState, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
-                yieldByResource);
+                targetsEmpty, yieldByResource, failedByReason);
     }
 
     /** The checkpoint as Core will replay it. */
@@ -152,9 +155,10 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
         if (targetsDigest == null || targetsDigest.isBlank()) {
             throw new ValidationException("Run checkpoint carries no target digest");
         }
-        if (cursorIndex < 0 || sequenceHighWater < 0 || targetsProcessed < 0 || targetsFailed < 0) {
+        if (cursorIndex < 0 || sequenceHighWater < 0 || targetsProcessed < 0 || targetsFailed < 0 || targetsEmpty < 0) {
             throw new ValidationException("Run checkpoint counts backwards: cursor " + cursorIndex + ", sequence "
-                    + sequenceHighWater + ", processed " + targetsProcessed + ", failed " + targetsFailed);
+                    + sequenceHighWater + ", processed " + targetsProcessed + ", failed " + targetsFailed + ", empty "
+                    + targetsEmpty);
         }
         if (cursorIndex != targetsProcessed) {
             // Every committed chunk advances both by the same count, including the short final one, so these are
@@ -163,15 +167,16 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
             throw new ValidationException(
                     "Run checkpoint resumes at target " + cursorIndex + " having processed " + targetsProcessed);
         }
-        if (targetsFailed > targetsProcessed) {
-            throw new ValidationException("Run checkpoint reports " + targetsFailed + " failed targets within "
-                    + targetsProcessed + " processed");
+        if (targetsFailed + targetsEmpty > targetsProcessed) {
+            throw new ValidationException("Run checkpoint reports " + targetsFailed + " failed and " + targetsEmpty
+                    + " empty targets within " + targetsProcessed + " processed");
         }
-        // Normalised rather than refused: an absent map is a run that has produced nothing, which is a state a
-        // checkpoint legitimately describes.
-        return yieldByResource == null
+        // Normalised rather than refused: an absent map is a run that has produced nothing, or one whose checkpoint
+        // an older connector wrote, and both are states a checkpoint legitimately describes.
+        return yieldByResource == null || failedByReason == null
                 ? new RunHandle(state, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
-                        Map.of())
+                        targetsEmpty, yieldByResource == null ? Map.of() : yieldByResource,
+                        failedByReason == null ? Map.of() : failedByReason)
                 : this;
     }
 
