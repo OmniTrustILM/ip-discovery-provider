@@ -42,6 +42,9 @@ public final class TargetEnumeration {
     private static final Pattern PORT_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_VALIDATION_REGEX);
     private static final Pattern PORT_RANGE_PATTERN = Pattern.compile(AttributeServiceImpl.PORT_RANGE_VALIDATION_REGEX);
 
+    /** The narrowest prefix with no network or broadcast address to exclude; {@code /32} is narrower still. */
+    private static final int POINT_TO_POINT_PREFIX = 31;
+
     private static final int MAX_OCTET = 255;
     private static final int MIN_PORT = 1;
     private static final int MAX_PORT = 65535;
@@ -151,8 +154,9 @@ public final class TargetEnumeration {
     }
 
     /**
-     * Adds a CIDR block's <em>usable</em> addresses, network and broadcast excluded. A {@code /31} or {@code /32}
-     * therefore contributes nothing.
+     * Adds a CIDR block's <em>usable</em> addresses. A {@code /30} or wider excludes its network and broadcast
+     * addresses; a {@code /31} has neither, so both its addresses are hosts (RFC 3021), and a {@code /32} is the one
+     * host it names.
      */
     private static void addSubnet(String entry, List<long[]> blocks) {
         String[] parts = entry.split("/");
@@ -162,7 +166,9 @@ public final class TargetEnumeration {
         long mask = prefix == 0 ? 0L : (0xFFFFFFFFL << (32 - prefix)) & 0xFFFFFFFFL;
         long network = address & mask;
         long broadcast = network | (~mask & 0xFFFFFFFFL);
-        if (broadcast - network >= 2) {
+        if (prefix >= POINT_TO_POINT_PREFIX) {
+            blocks.add(new long[]{network, broadcast});
+        } else {
             blocks.add(new long[]{network + 1, broadcast - 1});
         }
     }
@@ -291,9 +297,9 @@ public final class TargetEnumeration {
         long value = 0;
         for (String octet : octets) {
             // A leading zero fails the address regex but passes the subnet one, whose prefix is optional, so it
-            // arrived here as a /32 and contributed nothing -- a spec accepted with zero targets. Rejected rather
-            // than read as decimal, because the notation is ambiguous: 010 is octal 8 to inet_aton and decimal 10
-            // to Integer.parseInt, so accepting it can mean scanning a host nobody named.
+            // arrives here as a /32. Rejected rather than read as decimal, because the notation is ambiguous: 010 is
+            // octal 8 to inet_aton and decimal 10 to Integer.parseInt, so accepting it can mean scanning a host
+            // nobody named.
             if (octet.length() > 1 && octet.charAt(0) == '0') {
                 throw new ValidationException("Invalid IP address, octets must not carry leading zeros: " + dottedQuad);
             }

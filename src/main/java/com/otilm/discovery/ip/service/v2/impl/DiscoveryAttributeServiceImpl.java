@@ -210,6 +210,9 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
             - IP address range (`10.1.1.20-10.1.1.150`)
             - CIDR subnet (`172.16.1.0/24`)
 
+            A subnet skips its network and broadcast addresses, except a `/31`, which scans both of its addresses,
+            and a `/32`, which scans the one host it names.
+
             Each entry under **Ports** is a single port (`443`) or a range (`9000-10000`).
             Leave Ports empty to scan 443.
 
