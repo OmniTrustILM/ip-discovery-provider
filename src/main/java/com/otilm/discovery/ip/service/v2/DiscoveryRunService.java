@@ -467,7 +467,10 @@ public class DiscoveryRunService {
         }
     }
 
-    /** Stable across versions: Core replaces the run's metadata by this definition on every answer carrying it. */
+    /**
+     * Stable across versions. Core replaces the run's whole metadata with every statement, so any other run-metadata
+     * attribute must be sent together with this one on each answer, or the two erase each other.
+     */
     static final String FAILURE_REASONS_UUID = "8d3f2c6e-5a41-4b9e-a7c2-1e6f0b9d4a53";
 
     /** Enough to name every kind of failure a sweep meets, and a bound on what one answer carries. */
@@ -529,13 +532,14 @@ public class DiscoveryRunService {
         // working run looking frozen between boundaries.
         // Failures first. A failing probe counts itself processed before it counts itself failed, so reading in
         // that order cannot see a failure whose processed increment has not landed yet.
-        long inFlightFailed = registry.runner(runId).map(ScanRunner::inFlightFailed).orElse(0L);
-        long inFlightEmpty = registry.runner(runId).map(ScanRunner::inFlightEmpty).orElse(0L);
-        long inFlightProcessed = registry.runner(runId).map(ScanRunner::inFlightProcessed).orElse(0L);
+        ScanRunner.InFlight inFlight = registry
+                .runner(runId)
+                .map(ScanRunner::inFlight)
+                .orElse(ScanRunner.InFlight.NONE);
 
-        long processed = handle.targetsProcessed() + inFlightProcessed;
-        long failed = handle.targetsFailed() + inFlightFailed;
-        long empty = handle.targetsEmpty() + inFlightEmpty;
+        long processed = handle.targetsProcessed() + inFlight.processed();
+        long failed = handle.targetsFailed() + inFlight.failed();
+        long empty = handle.targetsEmpty() + inFlight.empty();
         // The checkpoint and the chunk are read a moment apart, and a commit between them moves one into the other.
         // Clamped rather than locked: this figure is advisory and recomputed on every poll, so a sample that is
         // briefly stale costs nothing, while one reporting more targets than the run has -- or more failures than

@@ -257,6 +257,36 @@ class RunHandleTest {
                         "an empty target is never a failed one too, so the two cannot exceed the work");
     }
 
+    @Test
+    void refusesACheckpointWhoseCountsCannotBeRead() {
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":4,\"sequenceHighWater\":0,"
+                                + "\"targetsDigest\":\"d\",\"targetsProcessed\":4,\"targetsFailed\":2,"
+                                + "\"failedByReason\":{\"IOException\":null}}"),
+                        "a reason without a count would fail the next status rather than this read");
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":4,\"sequenceHighWater\":0,"
+                                + "\"targetsDigest\":\"d\",\"targetsProcessed\":4,\"targetsFailed\":2,"
+                                + "\"failedByReason\":{\"IOException\":3}}"),
+                        "more failures by reason than failed targets is not a state a run can reach");
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":4,\"sequenceHighWater\":0,"
+                                + "\"targetsDigest\":\"d\",\"targetsProcessed\":4,\"targetsFailed\":0,"
+                                + "\"yieldByResource\":{\"certificates\":-1}}"));
+    }
+
+    @Test
+    void refusesOutcomesThatOverflowPastTheirTargets() {
+        Assertions
+                .assertThrows(ValidationException.class,
+                        () -> decode("{\"state\":\"STOPPED\",\"cursorIndex\":" + Long.MAX_VALUE
+                                + ",\"sequenceHighWater\":0,\"targetsDigest\":\"d\",\"targetsProcessed\":"
+                                + Long.MAX_VALUE + ",\"targetsFailed\":" + Long.MAX_VALUE + ",\"targetsEmpty\":1}"));
+    }
+
     /** Built outside the assertion lambda so only the call under test can throw from inside it. */
     private static MetadataAttribute checkpointOf(String json) {
         MetadataAttributeV3 attribute = new MetadataAttributeV3();

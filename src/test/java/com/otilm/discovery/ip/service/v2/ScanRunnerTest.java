@@ -389,7 +389,7 @@ class ScanRunnerTest {
 
         Assertions.assertEquals(4, registry.find(runId).orElseThrow().targetsProcessed());
         Assertions.assertEquals(0, registry.find(runId).orElseThrow().targetsFailed());
-        Assertions.assertEquals("", runner.failureSummary());
+        Assertions.assertEquals(Map.of(), registry.find(runId).orElseThrow().failedByReason());
     }
 
     @Test
@@ -450,7 +450,7 @@ class ScanRunnerTest {
         runner.scan();
 
         Assertions
-                .assertEquals(": 4 x IOException", runner.failureSummary(),
+                .assertEquals(Map.of("IOException", 4L), registry.find(runId).orElseThrow().failedByReason(),
                         "the count and the reason belong together, or the log says nothing new");
     }
 
@@ -474,7 +474,8 @@ class ScanRunnerTest {
         runner.scan();
 
         Assertions
-                .assertEquals(": 4 x item:CertificateEncodingException", runner.failureSummary(),
+                .assertEquals(Map.of("Certificate this connector could not use (CertificateEncodingException)", 4L),
+                        registry.find(runId).orElseThrow().failedByReason(),
                         "an item this connector could not build is marked as ours");
         RunHandle handle = registry.find(runId).orElseThrow();
         Assertions.assertEquals(4, handle.targetsProcessed());
@@ -519,7 +520,7 @@ class ScanRunnerTest {
 
         Assertions.assertEquals(2, buffer.held(), "both targets should have yielded their key");
         Assertions.assertEquals(0, registry.find(runId).orElseThrow().targetsFailed());
-        Assertions.assertEquals("", runner.failureSummary());
+        Assertions.assertEquals(Map.of(), registry.find(runId).orElseThrow().failedByReason());
     }
 
     /**
@@ -546,7 +547,14 @@ class ScanRunnerTest {
 
         Assertions.assertEquals(0, buffer.held(), "no half of the pair may reach Core when the other cannot be built");
         Assertions.assertEquals(2, registry.find(runId).orElseThrow().targetsFailed());
-        Assertions.assertTrue(runner.failureSummary().contains("item:"), runner.failureSummary());
+        Assertions
+                .assertTrue(registry
+                        .find(runId)
+                        .orElseThrow()
+                        .failedByReason()
+                        .keySet()
+                        .stream()
+                        .allMatch(reason -> reason.startsWith("Certificate this connector could not use")));
     }
 
 }

@@ -62,7 +62,7 @@ class RunRebuildTest {
         @Override
         public ConnectionResponse getCertificates(String url) throws IOException {
             probed.incrementAndGet();
-            throw new IOException("nothing listening");
+            throw new IOException("no usable answer");
         }
     }
 

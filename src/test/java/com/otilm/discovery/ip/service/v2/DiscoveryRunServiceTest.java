@@ -470,7 +470,7 @@ class DiscoveryRunServiceTest {
         MetadataAttribute reasons = status.getMeta().getFirst();
         Assertions.assertTrue(reasons.getProperties().isVisible(), "the reasons are written for an operator to read");
         Assertions
-                .assertEquals(List.of("4 x SSLHandshakeException"),
+                .assertEquals(List.of("4 x TLS alert handshake_failure"),
                         ((List<?>) reasons.getContent())
                                 .stream()
                                 .map(content -> ((AttributeContent) content).getData())

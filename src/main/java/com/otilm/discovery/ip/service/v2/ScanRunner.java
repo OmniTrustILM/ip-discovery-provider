@@ -132,7 +132,7 @@ public class ScanRunner {
 
     /**
      * A buffer bound that cannot be waited out ends the run, naming the limit. Counting it as one more failed target
-     * would be silent truncation: a legitimate dark sweep also reports millions of failed targets, so a buffer-starved
+     * would be silent truncation: a legitimate dark sweep also reports millions of empty targets, so a buffer-starved
      * run would be indistinguishable from one that simply found nothing listening.
      */
     private void raiseIfFatal() {
@@ -158,22 +158,29 @@ public class ScanRunner {
         return stopping.get();
     }
 
-    /** Targets finished inside the chunk in flight, not yet in the checkpoint. */
-    public long inFlightProcessed() {
-        ChunkTally tally = inFlightChunk.get();
-        return tally == null ? 0L : tally.processed.get();
+    /**
+     * Targets finished inside the chunk in flight, not yet in the checkpoint, and how many of them failed or were
+     * empty.
+     *
+     * @param failed counted within {@code processed}, not beside it, and so is {@code empty}
+     */
+    public record InFlight(long failed, long empty, long processed) {
+
+        static final InFlight NONE = new InFlight(0L, 0L, 0L);
     }
 
-    /** Failures among them, counted within the processed figure above rather than beside it. */
-    public long inFlightFailed() {
+    /**
+     * Read from one tally, outcomes first: a probe counts itself processed before it counts its outcome, so reading in
+     * this order cannot see an outcome whose processed increment has not landed yet.
+     */
+    public InFlight inFlight() {
         ChunkTally tally = inFlightChunk.get();
-        return tally == null ? 0L : tally.failed.get();
-    }
-
-    /** Targets among them that held nothing to discover, counted the same way. */
-    public long inFlightEmpty() {
-        ChunkTally tally = inFlightChunk.get();
-        return tally == null ? 0L : tally.empty.get();
+        if (tally == null) {
+            return InFlight.NONE;
+        }
+        long failed = tally.failed.get();
+        long empty = tally.empty.get();
+        return new InFlight(failed, empty, tally.processed.get());
     }
 
     /** @return the chunk's tally, or null if a stop interrupted it before every probe finished */
@@ -210,7 +217,7 @@ public class ScanRunner {
                 inFlightChunk.set(null);
                 return null;
             } catch (java.util.concurrent.ExecutionException e) {
-                // A probe that threw has already been counted as failed; the run continues.
+                // A probe that threw has already counted its target as empty or failed; the run continues.
                 logger.debug("Probe in run {} ended with {}", runId, e.getCause().toString());
             }
         }
@@ -262,7 +269,7 @@ public class ScanRunner {
             if (TargetOutcome.ofProbeFailure(e) == TargetOutcome.EMPTY) {
                 tally.empty.incrementAndGet();
             } else {
-                recordFailure(tally, e.getClass().getSimpleName());
+                recordFailure(tally, TargetOutcome.reasonOf(e));
                 tally.failed.incrementAndGet();
             }
         } finally {
@@ -274,8 +281,8 @@ public class ScanRunner {
      * Turns one scanned certificate into the items the run asked for.
      *
      * <p>
-     * Its own failure is kept apart from the probe's. Both end the target as failed, but only one is our defect, and a
-     * mapping that threw for every certificate otherwise looks like a range with nothing listening.
+     * Its own failure is kept apart from the probe's: it fails the target under a reason naming it as this connector's
+     * defect, so a mapping that throws for every certificate cannot pass for hosts that refused the probe.
      */
     private void emit(X509Certificate certificate, String url, ChunkTally tally) throws InterruptedException {
         // Both items are built before either is published. Publishing the certificate and then failing to map the
@@ -303,7 +310,7 @@ public class ScanRunner {
             }
         } catch (Exception e) {
             logger.warn("Run {} could not map a certificate from {}: {}", runId, url, e.toString());
-            recordFailure(tally, ITEM_FAILURE_PREFIX + e.getClass().getSimpleName());
+            recordFailure(tally, TargetOutcome.unusableCertificate(e));
             throw new ItemNotMappedException(e);
         }
         // Nothing here maps: add throws only for a stop or a bound the run cannot wait out, and both mean the run
@@ -330,13 +337,9 @@ public class ScanRunner {
     }
 
     /**
-     * The reasons this run's targets failed, commonest first, as "{@code 4094 x SSLHandshakeException}". Without it a
-     * TLS stack refusing a bare IP and a bug here print the same number.
+     * The reasons the run's targets failed, commonest first, as "{@code 4094 x TLS alert handshake_failure}". Without
+     * it a TLS stack refusing a bare IP and a bug here print the same number.
      */
-    String failureSummary() {
-        return registry.find(runId).map(handle -> summaryOf(handle.failedByReason())).orElse("");
-    }
-
     private static String summaryOf(Map<String, Long> reasons) {
         if (reasons.isEmpty()) {
             return "";
@@ -345,7 +348,8 @@ public class ScanRunner {
     }
 
     /**
-     * The reasons as "{@code 4094 x SSLHandshakeException}", commonest first and then by name, at most {@code limit}.
+     * The reasons as "{@code 4094 x TLS alert handshake_failure}", commonest first, then by name, at most
+     * {@code limit}.
      */
     static List<String> byFrequency(Map<String, Long> reasons, int limit) {
         return reasons
@@ -390,9 +394,6 @@ public class ScanRunner {
 
     /** Enough to name what is happening without turning one log line into a report. */
     private static final int TOP_FAILURE_REASONS = 3;
-
-    /** Marks a reason as this connector failing to use a certificate, not a target failing to answer. */
-    private static final String ITEM_FAILURE_PREFIX = "item:";
 
     private static final String SOURCE_ATTRIBUTE_UUID = "c1f0e6a2-3d5b-4a17-9f8c-6b2e0d4a7e31";
 

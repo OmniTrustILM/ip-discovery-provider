@@ -167,9 +167,16 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
             throw new ValidationException(
                     "Run checkpoint resumes at target " + cursorIndex + " having processed " + targetsProcessed);
         }
-        if (targetsFailed + targetsEmpty > targetsProcessed) {
+        // Compared without adding, so outcomes near the long range cannot wrap past the check.
+        if (targetsFailed > targetsProcessed || targetsEmpty > targetsProcessed - targetsFailed) {
             throw new ValidationException("Run checkpoint reports " + targetsFailed + " failed and " + targetsEmpty
                     + " empty targets within " + targetsProcessed + " processed");
+        }
+        requireCounts("yieldByResource", yieldByResource);
+        long failuresByReason = requireCounts("failedByReason", failedByReason);
+        if (failuresByReason > targetsFailed) {
+            throw new ValidationException("Run checkpoint names reasons for " + failuresByReason + " failures within "
+                    + targetsFailed + " failed targets");
         }
         // Normalised rather than refused: an absent map is a run that has produced nothing, or one whose checkpoint
         // an older connector wrote, and both are states a checkpoint legitimately describes.
@@ -178,6 +185,30 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
                         targetsEmpty, yieldByResource == null ? Map.of() : yieldByResource,
                         failedByReason == null ? Map.of() : failedByReason)
                 : this;
+    }
+
+    /**
+     * Jackson reads a missing count as null, which would fail a later status call rather than this read.
+     *
+     * @return the counts' total, overflow-safe; 0 for an absent map
+     */
+    private static long requireCounts(String field, Map<String, Long> counts) {
+        if (counts == null) {
+            return 0;
+        }
+        long total = 0;
+        for (Map.Entry<String, Long> entry : counts.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank() || entry.getValue() == null
+                    || entry.getValue() < 0) {
+                throw new ValidationException("Run checkpoint carries an unreadable " + field + " entry " + entry);
+            }
+            try {
+                total = Math.addExact(total, entry.getValue());
+            } catch (ArithmeticException e) {
+                throw new ValidationException("Run checkpoint " + field + " counts overflow");
+            }
+        }
+        return total;
     }
 
     private String toJson() {
