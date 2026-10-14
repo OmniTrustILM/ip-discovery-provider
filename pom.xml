@@ -170,9 +170,6 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
-				<configuration>
-					<executable>true</executable>
-				</configuration>
 				<executions>
 					<execution>
 						<!-- Generates build-info.properties, which backs the BuildProperties bean the v2 info
