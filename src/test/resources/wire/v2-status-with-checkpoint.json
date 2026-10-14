@@ -2,10 +2,13 @@
   "status" : 200,
   "contentType" : "application/json",
   "body" : {
-    "highestSequence" : 1,
+    "highestSequence" : 2,
     "progress" : {
       "byResource" : {
         "certificates" : {
+          "produced" : 1
+        },
+        "keys" : {
           "produced" : 1
         }
       },

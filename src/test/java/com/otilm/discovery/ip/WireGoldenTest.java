@@ -54,7 +54,8 @@ class WireGoldenTest {
             .compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     private static final Pattern TIMESTAMP = Pattern
             .compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?");
-    private static final Pattern DIGEST = Pattern.compile("(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])");
+    /** The digest over the run's targets, which include the random TLS port; every other digest is a constant. */
+    private static final Pattern TARGETS_DIGEST = Pattern.compile("(targetsDigest[^0-9a-f]{1,8})[0-9a-f]{64}");
     private static final String RUN_ID = "5b1c7d9e-0f3a-4c2b-9d8e-7a6f5e4d3c2b";
     /** Core stores metadata under these attribute UUIDs, so changing one orphans what it already holds. */
     private static final Set<String> METADATA_ATTRIBUTE_UUIDS = Set
@@ -183,7 +184,7 @@ class WireGoldenTest {
     @Test
     void v2RunLifecycle() throws Exception {
         String scope = """
-                "runId":"%s","resources":["certificates"],"attributes":[
+                "runId":"%s","resources":["certificates","keys"],"attributes":[
                   {"uuid":"2cc7b1ee-7656-4844-a651-aed2300b750b","name":"data_hosts","contentType":"string",
                    "content":[{"data":"127.0.0.1","contentType":"string"}],"version":"v3"},
                   {"uuid":"acc48fc4-803e-45b1-951f-02764abcbbe8","name":"data_ports","contentType":"string",
@@ -253,12 +254,12 @@ class WireGoldenTest {
     }
 
     /**
-     * Masks what differs between runs, hosts and releases: the TLS port and digests over it, the build version, the
-     * time and zone, generated UUIDs. Digests go first, since one can hold the port's digits between two hex letters.
-     * Only the exact build version is masked, so a field that reports any other version still fails.
+     * Masks what differs between runs, hosts and releases: the TLS port and the targets digest over it, the build
+     * version, the time and zone, generated UUIDs. The digest goes first, since it can hold the port's digits between
+     * two hex letters. Only the exact build version is masked, so a field that reports any other version still fails.
      */
     private String normalized(String body) {
-        String masked = DIGEST.matcher(body).replaceAll("<digest>");
+        String masked = TARGETS_DIGEST.matcher(body).replaceAll("$1<digest>");
         masked = masked.replace("\"" + build.getVersion() + "\"", "\"<version>\"");
         masked = masked.replaceAll("(?<![0-9])" + tlsPort + "(?![0-9])", "<port>");
         masked = TIMESTAMP
