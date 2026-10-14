@@ -51,6 +51,14 @@ class WireGoldenTest {
             .compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?");
     private static final Pattern DIGEST = Pattern.compile("(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])");
     private static final String RUN_ID = "5b1c7d9e-0f3a-4c2b-9d8e-7a6f5e4d3c2b";
+    /** Core stores metadata under these attribute UUIDs, so changing one orphans what it already holds. */
+    private static final Set<String> METADATA_ATTRIBUTE_UUIDS = Set
+            .of("52cf88e4-6b87-40f5-a89d-9b6e6d676119", // meta_runHandle
+                    "c1f0e6a2-3d5b-4a17-9f8c-6b2e0d4a7e31", // meta_discoverySource
+                    "000043aa-6022-11ed-9b6a-0242ac120002", // discoverySource
+                    "872ca286-601f-11ed-9b6a-0242ac120002", // totalUrls
+                    "872ca600-601f-11ed-9b6a-0242ac120002", // successUrls
+                    "872ca7ea-601f-11ed-9b6a-0242ac120002"); // failedUrls
     private static final String TERMINAL_V1 = "\"status\":\"inProgress\"";
 
     private static HttpsServer tls;
@@ -89,9 +97,13 @@ class WireGoldenTest {
         tls.stop(0);
     }
 
-    /** The definitions' UUIDs are constants, so they stay in the goldens; every other UUID is generated per run. */
+    /**
+     * The definitions' and the metadata attributes' UUIDs are constants, so they stay in the goldens; every other UUID
+     * is generated per run.
+     */
     @BeforeEach
     void collectStableUuids() throws Exception {
+        stableUuids.addAll(METADATA_ATTRIBUTE_UUIDS);
         stableUuids.addAll(uuidsIn(get("/v1/discoveryProvider/IP-Hostname/attributes").body()));
         stableUuids.addAll(uuidsIn(get("/v2/attributes").body()));
     }

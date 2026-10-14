@@ -21,7 +21,7 @@
           "visible" : true
         },
         "type" : "meta",
-        "uuid" : "<uuid>",
+        "uuid" : "000043aa-6022-11ed-9b6a-0242ac120002",
         "version" : 2
       } ],
       "uuid" : "<uuid>"
@@ -43,7 +43,7 @@
         "visible" : true
       },
       "type" : "meta",
-      "uuid" : "<uuid>",
+      "uuid" : "872ca7ea-601f-11ed-9b6a-0242ac120002",
       "version" : 2
     }, {
       "content" : [ {
@@ -62,7 +62,7 @@
         "visible" : true
       },
       "type" : "meta",
-      "uuid" : "<uuid>",
+      "uuid" : "872ca600-601f-11ed-9b6a-0242ac120002",
       "version" : 2
     }, {
       "content" : [ {
@@ -81,7 +81,7 @@
         "visible" : true
       },
       "type" : "meta",
-      "uuid" : "<uuid>",
+      "uuid" : "872ca286-601f-11ed-9b6a-0242ac120002",
       "version" : 2
     } ],
     "name" : "wire",
