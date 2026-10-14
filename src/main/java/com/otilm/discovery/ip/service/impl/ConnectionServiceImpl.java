@@ -109,6 +109,10 @@ public class ConnectionServiceImpl implements ConnectionService {
         }, totalTimeoutMs, TimeUnit.MILLISECONDS);
         try {
             conn.connect();
+            // Inside the try, so a deadline claimed as connect() returns gets the same translation as one before it.
+            if (!claimed.compareAndSet(false, true)) {
+                throw deadlineExceeded(url);
+            }
         } catch (IOException e) {
             IOException failure = e;
             // Closing the socket surfaces as an arbitrary socket error, which would blur a deliberate abandonment
@@ -123,9 +127,6 @@ public class ConnectionServiceImpl implements ConnectionService {
         } finally {
             deadline.cancel(false);
             InsecureSSL.forgetChain();
-        }
-        if (!claimed.compareAndSet(false, true)) {
-            throw deadlineExceeded(url);
         }
         logger.debug("Connected to {}", url);
         X509Certificate[] certs = (X509Certificate[]) conn.getServerCertificates();
