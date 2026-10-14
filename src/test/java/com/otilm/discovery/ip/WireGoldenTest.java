@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.net.ssl.KeyManagerFactory;
@@ -63,6 +65,8 @@ class WireGoldenTest {
 
     private static HttpsServer tls;
     private static int tlsPort;
+    /** While closed, every TLS handshake waits, so a scan cannot finish before the test has read its first answer. */
+    private static volatile CountDownLatch handshakes = new CountDownLatch(0);
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final Set<String> stableUuids = new HashSet<>(Set.of(RUN_ID));
@@ -83,7 +87,17 @@ class WireGoldenTest {
         sslContext.init(keyManagers.getKeyManagers(), null, null);
 
         tls = HttpsServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        tls.setHttpsConfigurator(new HttpsConfigurator(sslContext));
+        tls.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+            @Override
+            public void configure(HttpsParameters params) {
+                try {
+                    handshakes.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                super.configure(params);
+            }
+        });
         tls.createContext("/", exchange -> {
             exchange.sendResponseHeaders(200, -1);
             exchange.close();
@@ -139,9 +153,17 @@ class WireGoldenTest {
 
     @Test
     void v1Discovery() throws Exception {
-        HttpResponse<String> started = post("/v1/discoveryProvider/discover", """
-                {"name":"wire","kind":"IP-Hostname","attributes":%s}""".formatted(v1Attributes()));
-        assertGolden("v1-discover", started);
+        // The scan runs asynchronously on the same history the first answer is built from, so a fast local handshake
+        // could otherwise complete the discovery before that answer is written.
+        handshakes = new CountDownLatch(1);
+        HttpResponse<String> started;
+        try {
+            started = post("/v1/discoveryProvider/discover", """
+                    {"name":"wire","kind":"IP-Hostname","attributes":%s}""".formatted(v1Attributes()));
+            assertGolden("v1-discover", started);
+        } finally {
+            handshakes.countDown();
+        }
 
         String uuid = JSON.readTree(started.body()).get("uuid").asText();
         String page = """
