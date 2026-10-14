@@ -41,8 +41,9 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Holds the REST JSON of both surfaces to goldens recorded on the Spring Boot 3.5 line, so a change of JSON library
- * cannot alter what Core reads. Record with {@code -Dwire.golden.write=true} on the 3.5 line only.
+ * Holds the REST JSON of both surfaces to goldens, so a change of JSON library cannot alter what Core reads. They were
+ * recorded on the Spring Boot 3.5 line as the baseline for the move to 4.1. Re-record an intended wire change with
+ * {@code -Dwire.golden.write=true} and review the golden diff in the pull request.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class WireGoldenTest {
@@ -63,7 +64,7 @@ class WireGoldenTest {
                     "872ca286-601f-11ed-9b6a-0242ac120002", // totalUrls
                     "872ca600-601f-11ed-9b6a-0242ac120002", // successUrls
                     "872ca7ea-601f-11ed-9b6a-0242ac120002"); // failedUrls
-    private static final String TERMINAL_V1 = "\"status\":\"inProgress\"";
+    private static final String IN_PROGRESS_V1 = "\"status\":\"inProgress\"";
 
     private static HttpsServer tls;
     private static int tlsPort;
@@ -175,7 +176,7 @@ class WireGoldenTest {
                 {"name":"wire","kind":"IP-Hostname","pageNumber":0,"itemsPerPage":10}""";
         await()
                 .atMost(Duration.ofSeconds(30))
-                .until(() -> !post("/v1/discoveryProvider/discover/" + uuid, page).body().contains(TERMINAL_V1));
+                .until(() -> !post("/v1/discoveryProvider/discover/" + uuid, page).body().contains(IN_PROGRESS_V1));
         assertGolden("v1-discovery", post("/v1/discoveryProvider/discover/" + uuid, page));
     }
 
@@ -306,7 +307,7 @@ class WireGoldenTest {
         if (Boolean.getBoolean("wire.golden.write")) {
             Files.writeString(golden, JSON.writerWithDefaultPrettyPrinter().writeValueAsString(actual) + "\n");
         }
-        JsonNode expected = JSON.readTree(Files.readString(golden));
+        JsonNode expected = inAnyOrder(JSON.readTree(Files.readString(golden)));
         assertEquals(expected, actual, "Wire output drifted from " + golden + ": " + actual);
     }
 }
