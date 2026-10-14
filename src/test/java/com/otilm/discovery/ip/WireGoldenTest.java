@@ -226,10 +226,11 @@ class WireGoldenTest {
 
     /**
      * Masks what differs between runs and hosts: the TLS port and digests over it, the time and zone, generated UUIDs.
+     * Digests go first, since one can hold the port's digits between two hex letters.
      */
     private String normalized(String body) {
-        String masked = body.replaceAll("(?<![0-9])" + tlsPort + "(?![0-9])", "<port>");
-        masked = DIGEST.matcher(masked).replaceAll("<digest>");
+        String masked = DIGEST.matcher(body).replaceAll("<digest>");
+        masked = masked.replaceAll("(?<![0-9])" + tlsPort + "(?![0-9])", "<port>");
         masked = TIMESTAMP
                 .matcher(masked)
                 .replaceAll(match -> match
