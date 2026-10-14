@@ -14,6 +14,7 @@ import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -180,11 +181,12 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
         }
         // Normalised rather than refused: an absent map is a run that has produced nothing, or one whose checkpoint
         // an older connector wrote, and both are states a checkpoint legitimately describes.
-        return yieldByResource == null || failedByReason == null
-                ? new RunHandle(state, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
-                        targetsEmpty, yieldByResource == null ? Map.of() : yieldByResource,
-                        failedByReason == null ? Map.of() : failedByReason)
-                : this;
+        if (yieldByResource != null && failedByReason != null) {
+            return this;
+        }
+        return new RunHandle(state, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
+                targetsEmpty, Objects.requireNonNullElse(yieldByResource, Map.of()),
+                Objects.requireNonNullElse(failedByReason, Map.of()));
     }
 
     /**
