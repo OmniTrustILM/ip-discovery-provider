@@ -1,5 +1,6 @@
 package com.otilm.discovery.ip.service.v2;
 
+import com.otilm.discovery.ip.service.HandshakeEndedAfterCertificateException;
 import java.io.EOFException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
@@ -17,6 +18,11 @@ import javax.net.ssl.SSLHandshakeException;
  * nothing on them, so those are empty rather than failed: nothing listening, nothing answering, an answer that is not
  * TLS, or a connection dropped before any TLS answer. A target fails when it answered as a TLS host and still could not
  * be read, when it was named and the name leads nowhere, or for any reason not recognised here.
+ *
+ * <p>
+ * A drop is told apart from a TLS answer by whether the server's certificate arrived first. A TLS 1.3 host that hangs
+ * up before its encrypted certificate therefore still reads as empty, since the JDK reports it as it does a peer that
+ * never answered.
  */
 enum TargetOutcome {
 
@@ -42,6 +48,9 @@ enum TargetOutcome {
     private static final int MAX_CAUSE_DEPTH = 8;
 
     static TargetOutcome ofProbeFailure(Throwable failure) {
+        if (failure instanceof HandshakeEndedAfterCertificateException) {
+            return FAILED;
+        }
         Throwable cause = failure;
         for (int depth = 0; cause != null && depth < MAX_CAUSE_DEPTH; depth++, cause = cause.getCause()) {
             if (nothingAnswered(cause) || (cause.getMessage() != null && cause.getMessage().contains(NOT_TLS))) {
@@ -66,7 +75,15 @@ enum TargetOutcome {
                 return "TLS alert " + alert.group(1);
             }
         }
-        return failure instanceof SSLHandshakeException ? "TLS handshake failed" : failure.getClass().getSimpleName();
+        Throwable answer = failure;
+        if (failure instanceof HandshakeEndedAfterCertificateException && failure.getCause() != null) {
+            answer = failure.getCause();
+            // What would read as nothing answering, had the certificate not come first.
+            if (ofProbeFailure(answer) == EMPTY) {
+                return "TLS handshake ended after the server's certificate";
+            }
+        }
+        return answer instanceof SSLHandshakeException ? "TLS handshake failed" : answer.getClass().getSimpleName();
     }
 
     /** The reason for a target whose certificate this connector could not turn into an item: its own fault. */

@@ -2,6 +2,7 @@ package com.otilm.discovery.ip.service.impl;
 
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
+import com.otilm.discovery.ip.service.HandshakeEndedAfterCertificateException;
 import com.otilm.discovery.ip.util.InsecureSSL;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
@@ -109,14 +110,19 @@ public class ConnectionServiceImpl implements ConnectionService {
         try {
             conn.connect();
         } catch (IOException e) {
+            IOException failure = e;
             // Closing the socket surfaces as an arbitrary socket error, which would blur a deliberate abandonment
             // with a genuine one. Reported as a timeout, since that is what it is.
             if (!claimed.compareAndSet(false, true)) {
-                throw deadlineExceeded(url);
+                failure = deadlineExceeded(url);
             }
-            throw e;
+            if (InsecureSSL.chainPresented()) {
+                throw new HandshakeEndedAfterCertificateException(url, failure);
+            }
+            throw failure;
         } finally {
             deadline.cancel(false);
+            InsecureSSL.forgetChain();
         }
         if (!claimed.compareAndSet(false, true)) {
             throw deadlineExceeded(url);
