@@ -7,7 +7,7 @@
       "id" : "com.otilm.discovery.ip",
       "metadata" : null,
       "name" : "Network Discovery Provider",
-      "version" : "1.7.0-SNAPSHOT"
+      "version" : "<version>"
     },
     "interfaces" : [ {
       "code" : "attributes",

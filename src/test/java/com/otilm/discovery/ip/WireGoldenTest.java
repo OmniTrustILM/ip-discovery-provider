@@ -32,7 +32,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.info.BuildProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import static org.awaitility.Awaitility.await;
@@ -73,6 +75,9 @@ class WireGoldenTest {
 
     @Value("${local.server.port}")
     private int port;
+
+    @Autowired
+    private BuildProperties build;
 
     @BeforeAll
     static void serveTheGoldenCertificate() throws Exception {
@@ -247,11 +252,13 @@ class WireGoldenTest {
     }
 
     /**
-     * Masks what differs between runs and hosts: the TLS port and digests over it, the time and zone, generated UUIDs.
-     * Digests go first, since one can hold the port's digits between two hex letters.
+     * Masks what differs between runs, hosts and releases: the TLS port and digests over it, the build version, the
+     * time and zone, generated UUIDs. Digests go first, since one can hold the port's digits between two hex letters.
+     * Only the exact build version is masked, so a field that reports any other version still fails.
      */
     private String normalized(String body) {
         String masked = DIGEST.matcher(body).replaceAll("<digest>");
+        masked = masked.replace("\"" + build.getVersion() + "\"", "\"<version>\"");
         masked = masked.replaceAll("(?<![0-9])" + tlsPort + "(?![0-9])", "<port>");
         masked = TIMESTAMP
                 .matcher(masked)

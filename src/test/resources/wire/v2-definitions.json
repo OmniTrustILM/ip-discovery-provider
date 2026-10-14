@@ -2,7 +2,7 @@
   "status" : 200,
   "contentType" : "application/json",
   "body" : {
-    "connectorVersion" : "1.7.0-SNAPSHOT",
+    "connectorVersion" : "<version>",
     "definitions" : [ {
       "constraints" : [ {
         "data" : {
