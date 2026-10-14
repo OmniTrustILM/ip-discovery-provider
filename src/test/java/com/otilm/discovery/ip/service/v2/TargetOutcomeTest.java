@@ -271,14 +271,14 @@ class TargetOutcomeTest {
     }
 
     /** Whether a handshake record holds the Certificate message, walking its messages by their length prefixes. */
-    private static boolean carriesCertificate(byte[] record) {
+    private static boolean carriesCertificate(byte[] recordBody) {
         int offset = 0;
-        while (offset + 4 <= record.length) {
-            if (record[offset] == CERTIFICATE_MESSAGE) {
+        while (offset + 4 <= recordBody.length) {
+            if (recordBody[offset] == CERTIFICATE_MESSAGE) {
                 return true;
             }
-            offset += 4 + (((record[offset + 1] & 0xff) << 16) | ((record[offset + 2] & 0xff) << 8)
-                    | (record[offset + 3] & 0xff));
+            offset += 4 + (((recordBody[offset + 1] & 0xff) << 16) | ((recordBody[offset + 2] & 0xff) << 8)
+                    | (recordBody[offset + 3] & 0xff));
         }
         return false;
     }
