@@ -255,13 +255,14 @@ class WireGoldenTest {
 
     /**
      * Masks what differs between runs, hosts and releases: the TLS port and the targets digest over it, the build
-     * version, the time and zone, generated UUIDs. The digest goes first, since it can hold the port's digits between
-     * two hex letters. Only the exact build version is masked, so a field that reports any other version still fails.
+     * version, the time and zone, generated UUIDs. The port is masked only after the TLS host, since its digits also
+     * occur inside fixed digests and UUIDs. Only the exact build version is masked, so a field that reports any other
+     * version still fails.
      */
     private String normalized(String body) {
         String masked = TARGETS_DIGEST.matcher(body).replaceAll("$1<digest>");
         masked = masked.replace("\"" + build.getVersion() + "\"", "\"<version>\"");
-        masked = masked.replaceAll("(?<![0-9])" + tlsPort + "(?![0-9])", "<port>");
+        masked = masked.replace("127.0.0.1:" + tlsPort, "127.0.0.1:<port>");
         masked = TIMESTAMP
                 .matcher(masked)
                 .replaceAll(match -> match
