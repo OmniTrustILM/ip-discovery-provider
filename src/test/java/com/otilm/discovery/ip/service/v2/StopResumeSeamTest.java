@@ -236,10 +236,10 @@ class StopResumeSeamTest {
     void refusesToServeARunRebuiltByResumeUntilADrainProvesNothingWasLost() {
         UUID runId = UUID.randomUUID();
         DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), url -> {
-            throw new java.io.IOException("nothing listening");
+            throw new java.io.IOException("no usable answer");
         });
         RunHandle checkpoint = new RunHandle(RunHandle.RunState.STOPPED, 4L, 40L,
-                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, java.util.Map.of());
+                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, 0L, java.util.Map.of(), java.util.Map.of());
 
         service.resume(runRequest(runId, checkpoint.encode()));
 
@@ -258,10 +258,10 @@ class StopResumeSeamTest {
     void servesARebuiltRunOnceADrainArrivesAtTheCheckpoint() {
         UUID runId = UUID.randomUUID();
         DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), url -> {
-            throw new java.io.IOException("nothing listening");
+            throw new java.io.IOException("no usable answer");
         });
         RunHandle checkpoint = new RunHandle(RunHandle.RunState.STOPPED, 4L, 40L,
-                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, java.util.Map.of());
+                TargetEnumeration.of(HOSTS, "443", false).digest(), 4L, 0L, 0L, java.util.Map.of(), java.util.Map.of());
 
         service.status(runRequest(runId, checkpoint.encode()));
 

@@ -15,6 +15,7 @@ import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
 import com.otilm.discovery.ip.util.TargetEnumeration;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -55,12 +57,14 @@ class LiveProgressTest {
     /** Fails every probe, and holds the scan open once it has finished a nominated number of them. */
     private static class HoldsAfter implements ConnectionService {
         private final int holdAfter;
+        private final Supplier<IOException> failure;
         private final AtomicInteger probed = new AtomicInteger();
         private final CountDownLatch reached = new CountDownLatch(1);
         private final CountDownLatch release = new CountDownLatch(1);
 
-        HoldsAfter(int holdAfter) {
+        HoldsAfter(int holdAfter, Supplier<IOException> failure) {
             this.holdAfter = holdAfter;
+            this.failure = failure;
         }
 
         @Override
@@ -73,7 +77,7 @@ class LiveProgressTest {
                     Thread.currentThread().interrupt();
                 }
             }
-            throw new IOException("nothing listening");
+            throw failure.get();
         }
     }
 
@@ -115,7 +119,7 @@ class LiveProgressTest {
     @Test
     void reportsWorkDoneBeforeTheChunkBoundaryIsReached() throws Exception {
         UUID runId = UUID.randomUUID();
-        HoldsAfter probes = new HoldsAfter(5);
+        HoldsAfter probes = new HoldsAfter(5, () -> new IOException("no usable answer"));
         DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), probes);
 
         service.initiate(initiateRequest(runId));
@@ -146,6 +150,31 @@ class LiveProgressTest {
                 .until(() -> registry.state(runId).orElseThrow() != DiscoveryRunState.RUNNING);
     }
 
+    @Test
+    void reportsEmptyTargetsOfTheChunkInFlight() throws Exception {
+        UUID runId = UUID.randomUUID();
+        HoldsAfter probes = new HoldsAfter(5, () -> new ConnectException("Connection refused"));
+        DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), probes);
+
+        service.initiate(initiateRequest(runId));
+        Assertions.assertTrue(probes.reached.await(20, TimeUnit.SECONDS), "the scan never reached the hold");
+        Awaitility
+                .await()
+                .atMost(Duration.ofSeconds(10))
+                .until(() -> service.status(runRequest(runId)).getProgress().getTargetsProcessed() >= 5L);
+
+        DiscoveryProgressDto progress = service.status(runRequest(runId)).getProgress();
+
+        Assertions.assertEquals(progress.getTargetsProcessed(), progress.getTargetsEmpty());
+        Assertions.assertEquals(0L, progress.getTargetsFailed());
+
+        probes.release.countDown();
+        Awaitility
+                .await()
+                .atMost(Duration.ofSeconds(20))
+                .until(() -> registry.state(runId).orElseThrow() != DiscoveryRunState.RUNNING);
+    }
+
     /**
      * The in-flight figure is cleared as the chunk is absorbed into the checkpoint, never after. Clearing afterwards
      * would let both sources count the same chunk and report more targets than the run has.
@@ -154,7 +183,7 @@ class LiveProgressTest {
     void neverReportsMoreTargetsThanTheRunHas() {
         UUID runId = UUID.randomUUID();
         DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), url -> {
-            throw new IOException("nothing listening");
+            throw new IOException("no usable answer");
         });
 
         service.initiate(initiateRequest(runId));
@@ -167,8 +196,9 @@ class LiveProgressTest {
                     .assertTrue(progress.getTargetsProcessed() <= total,
                             "reported " + progress.getTargetsProcessed() + " of " + total + " targets");
             Assertions
-                    .assertTrue(progress.getTargetsFailed() <= progress.getTargetsProcessed(),
-                            "failures must stay within processed");
+                    .assertTrue(
+                            progress.getTargetsFailed() + progress.getTargetsEmpty() <= progress.getTargetsProcessed(),
+                            "failed and empty targets must stay within processed");
         }
 
         Awaitility
@@ -185,7 +215,7 @@ class LiveProgressTest {
     @Test
     void stopsCountingTheChunkItAbandons() throws Exception {
         UUID runId = UUID.randomUUID();
-        HoldsAfter probes = new HoldsAfter(5);
+        HoldsAfter probes = new HoldsAfter(5, () -> new IOException("no usable answer"));
         DiscoveryRunService service = new DiscoveryRunService(registry, budget, attributeService(), probes);
 
         service.initiate(initiateRequest(runId));

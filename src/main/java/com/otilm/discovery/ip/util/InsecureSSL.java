@@ -13,6 +13,13 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 public class InsecureSSL {
+
+    /**
+     * Whether the server presented its chain during the handshake running on this thread. JSSE consults the trust
+     * manager on the thread that drives the handshake, which is the one calling connect().
+     */
+    private static final ThreadLocal<Boolean> CHAIN_PRESENTED = new ThreadLocal<>();
+
     // Default trust manager that does NOT validate certificate chains
     private static TrustManager[] trustAllCerts = new TrustManager[]{new X509TrustManager() {
         public X509Certificate[] getAcceptedIssuers() {
@@ -23,8 +30,19 @@ public class InsecureSSL {
         }
 
         public void checkServerTrusted(X509Certificate[] certs, String authType) {
+            CHAIN_PRESENTED.set(Boolean.TRUE);
         }
     }};
+
+    /** Whether the server presented its chain during this thread's latest handshake. */
+    public static boolean chainPresented() {
+        return Boolean.TRUE.equals(CHAIN_PRESENTED.get());
+    }
+
+    /** Forgets the latest handshake, so the next one on this thread starts from nothing. */
+    public static void forgetChain() {
+        CHAIN_PRESENTED.remove();
+    }
 
     /**
      * Accepts every hostname, deliberately.
