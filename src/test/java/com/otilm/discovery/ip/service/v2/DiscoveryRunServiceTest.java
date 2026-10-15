@@ -3,6 +3,8 @@ package com.otilm.discovery.ip.service.v2;
 import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.client.attribute.RequestAttribute;
 import com.otilm.api.model.client.attribute.RequestAttributeV3;
+import com.otilm.api.model.common.attribute.common.AttributeContent;
+import com.otilm.api.model.common.attribute.common.MetadataAttribute;
 import com.otilm.api.model.common.attribute.common.content.AttributeContentType;
 import com.otilm.api.model.common.attribute.v3.content.BaseAttributeContentV3;
 import com.otilm.api.model.common.attribute.v3.content.StringAttributeContentV3;
@@ -12,6 +14,7 @@ import com.otilm.api.model.connector.discovery.v2.DiscoveryInitiateResponseDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryResultsResponseDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
+import com.otilm.api.model.connector.discovery.v2.DiscoveryStatusResponseDto;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
@@ -21,6 +24,7 @@ import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.cert.X509Certificate;
@@ -31,6 +35,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.net.ssl.SSLHandshakeException;
 import javax.security.auth.x500.X500Principal;
 import org.awaitility.Awaitility;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -426,26 +431,50 @@ class DiscoveryRunServiceTest {
     }
 
     /**
-     * Failures are counted within processed rather than beside it. A sweep that reached every target and found nothing
-     * listening is a complete run, not a degraded one, and must not read as stuck at less than 100 per cent.
+     * Empty targets are counted within processed rather than beside it. A sweep that reached every target and found
+     * nothing listening is a complete run, not a degraded one, and must not read as stuck at less than 100 per cent.
      */
     @Test
-    void anAllFailedSweepStillReachesEveryTarget() {
+    void aSweepWithNothingListeningIsCompleteAndFailedNowhere() {
         UUID runId = UUID.randomUUID();
-        DiscoveryRunService failing = new DiscoveryRunService(registry, budget, attributeService(), url -> {
-            throw new IOException("nothing listening");
+        DiscoveryRunService dark = new DiscoveryRunService(registry, budget, attributeService(), url -> {
+            throw new ConnectException("Connection refused");
         });
-        failing.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
+        dark.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
         awaitCompletion(runId);
 
-        var progress = failing.status(runRequest(runId)).getProgress();
+        DiscoveryStatusResponseDto status = dark.status(runRequest(runId));
+        var progress = status.getProgress();
 
         Assertions.assertEquals(progress.getTargetsTotal(), progress.getTargetsProcessed(), "the sweep is complete");
-        Assertions.assertEquals(4L, progress.getTargetsFailed());
+        Assertions.assertEquals(4L, progress.getTargetsEmpty());
+        Assertions.assertEquals(0L, progress.getTargetsFailed(), "an address with nothing on it is not a failure");
         Assertions.assertNull(progress.getByResource(), "a run that found nothing reports no per-resource yield");
+        Assertions.assertNull(status.getMeta(), "with nothing failed there is nothing to explain");
+        Assertions.assertEquals(DiscoveryRunState.COMPLETED, registry.state(runId).orElseThrow());
+    }
+
+    @Test
+    void saysWhyTargetsFailedInTheRunMetadata() {
+        UUID runId = UUID.randomUUID();
+        DiscoveryRunService refused = new DiscoveryRunService(registry, budget, attributeService(), url -> {
+            throw new SSLHandshakeException("Received fatal alert: handshake_failure");
+        });
+        refused.initiate(initiateRequest(runId, "10.0.0.1-10.0.0.4"));
+        awaitCompletion(runId);
+
+        DiscoveryStatusResponseDto status = refused.status(runRequest(runId));
+
+        Assertions.assertEquals(4L, status.getProgress().getTargetsFailed());
+        Assertions.assertEquals(1, status.getMeta().size());
+        MetadataAttribute reasons = status.getMeta().getFirst();
+        Assertions.assertTrue(reasons.getProperties().isVisible(), "the reasons are written for an operator to read");
         Assertions
-                .assertEquals(DiscoveryRunState.COMPLETED, registry.state(runId).orElseThrow(),
-                        "failing to reach a target does not degrade the run");
+                .assertEquals(List.of("4 x TLS alert handshake_failure"),
+                        ((List<?>) reasons.getContent())
+                                .stream()
+                                .map(content -> ((AttributeContent) content).getData())
+                                .toList());
     }
 
     /**

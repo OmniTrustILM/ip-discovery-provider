@@ -24,7 +24,7 @@ class RunRegistryTest {
     private final RunRegistry registry = new RunRegistry();
 
     private static RunHandle handle(long cursor) {
-        return new RunHandle(RunHandle.RunState.RUNNING, cursor, cursor, "digest", cursor, 0L, Map.of());
+        return new RunHandle(RunHandle.RunState.RUNNING, cursor, cursor, "digest", cursor, 0L, 0L, Map.of(), Map.of());
     }
 
     @Test
@@ -92,8 +92,10 @@ class RunRegistryTest {
             List<Callable<Object>> work = IntStream
                     .range(0, advances)
                     .<Callable<Object>>mapToObj(i -> () -> registry
-                            .update(runId, h -> new RunHandle(h.state(), h.cursorIndex() + 1, h.sequenceHighWater(),
-                                    h.targetsDigest(), h.targetsProcessed(), h.targetsFailed(), h.yieldByResource())))
+                            .update(runId,
+                                    h -> new RunHandle(h.state(), h.cursorIndex() + 1, h.sequenceHighWater(),
+                                            h.targetsDigest(), h.targetsProcessed(), h.targetsFailed(),
+                                            h.targetsEmpty(), h.yieldByResource(), h.failedByReason())))
                     .toList();
             executor.invokeAll(work);
         }

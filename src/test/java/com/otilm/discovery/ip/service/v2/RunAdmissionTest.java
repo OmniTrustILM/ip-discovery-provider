@@ -65,7 +65,7 @@ class RunAdmissionTest {
         @Override
         public ConnectionResponse getCertificates(String url) throws IOException {
             probed.incrementAndGet();
-            throw new IOException("nothing listening");
+            throw new IOException("no usable answer");
         }
     }
 
@@ -98,7 +98,7 @@ class RunAdmissionTest {
 
     private static RunHandle stoppedCheckpoint() {
         return new RunHandle(RunHandle.RunState.STOPPED, 4L, 40L, TargetEnumeration.of(HOSTS, "443", false).digest(),
-                4L, 0L, Map.of());
+                4L, 0L, 0L, Map.of(), Map.of());
     }
 
     private static DiscoveryRunRequestDto runRequest(UUID runId, List<MetadataAttribute> meta) {
