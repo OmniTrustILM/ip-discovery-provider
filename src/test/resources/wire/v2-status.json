@@ -12,6 +12,7 @@
           "produced" : 1
         }
       },
+      "targetsEmpty" : 0,
       "targetsFailed" : 0,
       "targetsProcessed" : 1,
       "targetsTotal" : 1
