@@ -31,7 +31,6 @@ server:
   port: ${PORT:8080}
 spring:
   datasource:
-    auto-commit: false
     driver-class-name: org.postgresql.Driver
     password: ${JDBC_PASSWORD}
     url: ${JDBC_URL}

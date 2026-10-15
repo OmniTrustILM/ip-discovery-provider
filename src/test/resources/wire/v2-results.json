@@ -1,0 +1,74 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : {
+    "highestSequence" : 2,
+    "items" : [ {
+      "discoveredAt" : "9999-99-99T99:99:99.9<zone>",
+      "meta" : [ {
+        "content" : [ {
+          "contentType" : "string",
+          "data" : "https://127.0.0.1:<port>",
+          "reference" : "https://127.0.0.1:<port>"
+        } ],
+        "contentType" : "string",
+        "description" : "The address and port this item was discovered on",
+        "name" : "meta_discoverySource",
+        "properties" : {
+          "global" : false,
+          "group" : null,
+          "label" : "Discovery source",
+          "overwrite" : false,
+          "protectionLevel" : "none",
+          "visible" : true
+        },
+        "schemaVersion" : "v3",
+        "type" : "meta",
+        "uuid" : "c1f0e6a2-3d5b-4a17-9f8c-6b2e0d4a7e31",
+        "version" : 3
+      } ],
+      "payload" : {
+        "algorithm" : "ECDSA",
+        "fingerprint" : "e1292634cd5867d5c4332e6bcb304fb06be41216c400ec0590273494d926479c",
+        "length" : 256,
+        "publicKey" : "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECbMqkvmYAG6uHWIR1BbwvvcTXZF99xvjFALoEj2LCNzgfrkhUjz2mK5h09mEvSkWBPPEJn6DTYfK7re0+rRcFA==",
+        "publicKeyFormat" : "SubjectPublicKeyInfo",
+        "resource" : "keys",
+        "type" : "Public"
+      },
+      "sequence" : 2,
+      "uniqueRef" : "e1292634cd5867d5c4332e6bcb304fb06be41216c400ec0590273494d926479c"
+    }, {
+      "discoveredAt" : "9999-99-99T99:99:99.9<zone>",
+      "meta" : [ {
+        "content" : [ {
+          "contentType" : "string",
+          "data" : "https://127.0.0.1:<port>",
+          "reference" : "https://127.0.0.1:<port>"
+        } ],
+        "contentType" : "string",
+        "description" : "The address and port this item was discovered on",
+        "name" : "meta_discoverySource",
+        "properties" : {
+          "global" : false,
+          "group" : null,
+          "label" : "Discovery source",
+          "overwrite" : false,
+          "protectionLevel" : "none",
+          "visible" : true
+        },
+        "schemaVersion" : "v3",
+        "type" : "meta",
+        "uuid" : "c1f0e6a2-3d5b-4a17-9f8c-6b2e0d4a7e31",
+        "version" : 3
+      } ],
+      "payload" : {
+        "certificateData" : "MIIBRjCB7KADAgECAgkAyHyo0WjN3l8wCgYIKoZIzj0EAwMwFjEUMBIGA1UEAxMLd2lyZS1nb2xkZW4wIBcNMjYwMTAxMTE0MTAzWhgPMjEyNTEyMDgxMTQxMDNaMBYxFDASBgNVBAMTC3dpcmUtZ29sZGVuMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECbMqkvmYAG6uHWIR1BbwvvcTXZF99xvjFALoEj2LCNzgfrkhUjz2mK5h09mEvSkWBPPEJn6DTYfK7re0+rRcFKMhMB8wHQYDVR0OBBYEFAUOj2Kf+B5zckCJInji+FjJJJPyMAoGCCqGSM49BAMDA0kAMEYCIQDuLnwUTQB4jOOW/t0WD8d5HMNBN0o41DKN8DIiENTM3wIhAIr5HEgZNbvQAckJvor5K32n8XWbDDnjuxTsXuttmeKT",
+        "resource" : "certificates"
+      },
+      "sequence" : 1,
+      "uniqueRef" : "c32d58517bd18d1fc4b2e625e491bc7db18c4ed1f02b0c106ceeaaa21d940133"
+    } ],
+    "more" : false
+  }
+}

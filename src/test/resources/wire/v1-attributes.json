@@ -1,0 +1,124 @@
+{
+  "status" : 200,
+  "contentType" : "application/json",
+  "body" : [ {
+    "constraints" : [ {
+      "data" : "^(?:((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}|((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}-((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}|(?=.{4,253}$)(((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\\.)+[a-zA-Z]{2,63})|([0-9]{1,3}\\.){3}[0-9]{1,3}($|/([1-9]|[12][0-9]|3[012])))(?:,(?:((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}|((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}-((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}|(?=.{4,253}$)(((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\\.)+[a-zA-Z]{2,63})|([0-9]{1,3}\\.){3}[0-9]{1,3}($|/([1-9]|[12][0-9]|3[012]))))*$",
+      "description" : "IP/Hostname format",
+      "errorMessage" : "Invalid IP/Hostname format",
+      "type" : "regExp"
+    } ],
+    "contentType" : "string",
+    "description" : "Multiple values can be given seperated by comma ','. IP address, hostname, IP address range, and CIDR subnet are supported.",
+    "name" : "ip",
+    "properties" : {
+      "extensibleList" : false,
+      "group" : null,
+      "label" : "IPs/Hostnames",
+      "list" : false,
+      "multiSelect" : false,
+      "protectionLevel" : "none",
+      "readOnly" : false,
+      "required" : true,
+      "resource" : null,
+      "visible" : true
+    },
+    "type" : "data",
+    "uuid" : "1b6c48ad-c1c7-4c82-91ef-3b61bc9f52ac",
+    "version" : 2
+  }, {
+    "constraints" : [ {
+      "data" : {
+        "from" : 1,
+        "to" : 100
+      },
+      "description" : "Allowed values for parallel executions",
+      "errorMessage" : "Invalid value for parallel executions, it can be between 1 and 100",
+      "type" : "range"
+    } ],
+    "content" : [ {
+      "data" : 1,
+      "reference" : null
+    } ],
+    "contentType" : "integer",
+    "description" : "Number of parallel executions of the discovery process. Default is 1 and maximum is 100.",
+    "name" : "data_parallel_executions",
+    "properties" : {
+      "extensibleList" : false,
+      "group" : null,
+      "label" : "Number of parallel executions",
+      "list" : false,
+      "multiSelect" : false,
+      "protectionLevel" : "none",
+      "readOnly" : false,
+      "required" : false,
+      "resource" : null,
+      "visible" : true
+    },
+    "type" : "data",
+    "uuid" : "1517c7a5-34cb-4f94-a0aa-1e9fe5b5b277",
+    "version" : 2
+  }, {
+    "content" : [ {
+      "data" : "443",
+      "reference" : "443"
+    } ],
+    "contentType" : "string",
+    "description" : "Multiple values can be given separated by comma ','. Port number or range of port numbers are supported.",
+    "name" : "port",
+    "properties" : {
+      "extensibleList" : false,
+      "group" : null,
+      "label" : "Ports",
+      "list" : false,
+      "multiSelect" : false,
+      "protectionLevel" : "none",
+      "readOnly" : false,
+      "required" : false,
+      "resource" : null,
+      "visible" : true
+    },
+    "type" : "data",
+    "uuid" : "a9091e0d-f9b9-4514-b275-1dd52aa870ec",
+    "version" : 2
+  }, {
+    "content" : [ {
+      "data" : "The IP-Hostname discovery is used to discover the certificates from the following sources:\n- IP address (`10.100.2.14`)\n- Hostname (`www.example.com`)\n- IP address range (`10.1.1.20-10.1.1.150`)\n- CIDR Subnet (`172.16.1.0/24`)\n\nBy default, the discovery is done on port 443. If the certificates are hosted on a different port,\nthe port numbers can be provided as input, the following is supported:\n- Single port number (`443`)\n- Range of port numbers (`9000-10000`)\n\nURLs for discovery are built as combination of provided IP addresses or hostnames and port numbers.\nEach URL is processed separately to discover the certificates.\n\n*The discovery can be done on all ports. However, it is recommended to provide the port numbers for better performance\nand avoiding network issues.*\n\nBy default, each URL is processed sequentially. The number of parallel executions can be increased\nto improve the performance. The maximum number of parallel executions that can be set is `100`.\n",
+      "reference" : null
+    } ],
+    "contentType" : "text",
+    "description" : "IPs/Hostnames certificates to be discovered.",
+    "name" : "info_ipHostname",
+    "properties" : {
+      "group" : null,
+      "label" : "IPs/Hostnames certificates to be discovered",
+      "visible" : true
+    },
+    "type" : "info",
+    "uuid" : "900a9da3-d7e3-4771-bdec-809f507731f1",
+    "version" : 2
+  }, {
+    "content" : [ {
+      "data" : false,
+      "reference" : null
+    } ],
+    "contentType" : "boolean",
+    "description" : "Check to discover certificates from all ports.",
+    "name" : "allPorts",
+    "properties" : {
+      "extensibleList" : false,
+      "group" : null,
+      "label" : "All Ports?",
+      "list" : false,
+      "multiSelect" : false,
+      "protectionLevel" : "none",
+      "readOnly" : false,
+      "required" : false,
+      "resource" : null,
+      "visible" : true
+    },
+    "type" : "data",
+    "uuid" : "3c70d728-e8c3-40f9-b9b2-5d7256f89ef0",
+    "version" : 2
+  } ]
+}
