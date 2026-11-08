@@ -142,7 +142,8 @@ class ProblemDetailsHandlingAdviceTest {
      */
     @Test
     void answers404AndOperationNotTrackedForARunThisNodeDoesNotHave() {
-        ProblemDetail problem = advice.handleUnknownRun(new UnknownRunException(UUID.randomUUID()));
+        ProblemDetail problem = advice
+                .handleUnknownRun(new UnknownRunException(UUID.randomUUID(), "the checkpoint is stale"));
 
         Assertions.assertEquals(HttpStatus.NOT_FOUND.value(), problem.getStatus());
         Assertions.assertEquals(ErrorCode.OPERATION_NOT_TRACKED, errorCodeOf(problem));

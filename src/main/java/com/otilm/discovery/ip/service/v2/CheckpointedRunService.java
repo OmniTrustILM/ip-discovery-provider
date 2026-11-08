@@ -55,6 +55,8 @@ public class CheckpointedRunService {
      */
     private static final Set<Resource> SUPPORTED = EnumSet.of(Resource.CERTIFICATE, Resource.CRYPTOGRAPHIC_KEY);
 
+    private static final String DIFFERENT_TARGETS = "its checkpoint indexes into a different set of targets";
+
     /** The bounds a drain that names none gets. */
     private static final int DEFAULT_MAX_ITEMS = 500;
     private static final long DEFAULT_MAX_BYTES = 5L * 1024 * 1024;
@@ -95,7 +97,7 @@ public class CheckpointedRunService {
         TargetEnumeration targets = enumerate(request);
         if (!targets.digest().equals(handle.targetsDigest())) {
             logger.warn("Run {} replayed a checkpoint for a different set of targets", request.getRunId());
-            throw new UnknownRunException(request.getRunId());
+            throw new UnknownRunException(request.getRunId(), DIFFERENT_TARGETS);
         }
 
         DiscoveryStatusResponseDto response = new DiscoveryStatusResponseDto();
@@ -128,13 +130,15 @@ public class CheckpointedRunService {
         TargetEnumeration targets = enumerate(request);
         if (!targets.digest().equals(from.targetsDigest())) {
             logger.warn("Run {} replayed a checkpoint for a different set of targets", runId);
-            throw new UnknownRunException(runId);
+            throw new UnknownRunException(runId, DIFFERENT_TARGETS);
         }
         if (request.getAfterSequence() != from.sequenceHighWater()) {
             logger
                     .warn("Refusing to serve run {}: Core is at sequence {} and the checkpoint at {}", runId,
                             request.getAfterSequence(), from.sequenceHighWater());
-            throw new UnknownRunException(runId);
+            throw new UnknownRunException(runId,
+                    "Core is at sequence " + request.getAfterSequence() + " and the checkpoint at "
+                            + from.sequenceHighWater() + ", so the checkpoint is stale or items were lost");
         }
         int parallelism = attributes.readParallelExecutions(request.getAttributes());
 

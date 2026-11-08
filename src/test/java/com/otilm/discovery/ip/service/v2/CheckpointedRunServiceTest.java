@@ -385,7 +385,11 @@ class CheckpointedRunServiceTest {
         CheckpointedRunService service = service();
         DiscoveryDrainRequestDto request = drain(stopped, 37);
 
-        Assertions.assertThrows(UnknownRunException.class, () -> service.results(request));
+        UnknownRunException refused = Assertions
+                .assertThrows(UnknownRunException.class, () -> service.results(request));
+        // Core shows this detail on the failed run; "not tracked" alone would read as the connector losing it.
+        Assertions.assertTrue(refused.getMessage().contains("sequence 37"), refused.getMessage());
+        Assertions.assertTrue(refused.getMessage().contains("40"), refused.getMessage());
     }
 
     @Test

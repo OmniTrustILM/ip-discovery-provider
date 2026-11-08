@@ -11,8 +11,9 @@ public class UnknownRunException extends RuntimeException {
 
     private final transient UUID runId;
 
-    public UnknownRunException(UUID runId) {
-        super("Run " + runId + " is not tracked by this connector");
+    /** @param reason why the request cannot be served, as an operator reads it beside the failed run */
+    public UnknownRunException(UUID runId, String reason) {
+        super("Run " + runId + " cannot be continued from its checkpoint: " + reason);
         this.runId = runId;
     }
 
