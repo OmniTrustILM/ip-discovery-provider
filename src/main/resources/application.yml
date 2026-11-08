@@ -13,6 +13,16 @@ discovery:
     connect-timeout-ms: ${DISCOVERY_PROBE_CONNECT_TIMEOUT_MS:500}
     read-timeout-ms: ${DISCOVERY_PROBE_READ_TIMEOUT_MS:2000}
     total-timeout-ms: ${DISCOVERY_PROBE_TOTAL_TIMEOUT_MS:10000}
+  slice:
+    # Bounds on one Discovery v2 results call. All must be positive.
+    # scan-budget-ms is how long a slice keeps launching probes; each launched probe then runs to its own
+    # total-timeout-ms. The two together must not exceed 18000, so the call answers inside the 20 s Core allows it.
+    # max-concurrent caps the slices this node scans at once; beyond it a results call answers 503 and Core retries.
+    # max-abandoned-probes caps probe threads still blocked past their deadline, such as a host-name lookup the JVM
+    # cannot interrupt; beyond it a results call answers 503 until they drain.
+    scan-budget-ms: ${DISCOVERY_SLICE_SCAN_BUDGET_MS:8000}
+    max-concurrent: ${DISCOVERY_SLICE_MAX_CONCURRENT:32}
+    max-abandoned-probes: ${DISCOVERY_SLICE_MAX_ABANDONED_PROBES:256}
   buffer:
     # The undrained results of the live runs on this node. Production blocks when a bound is reached rather than
     # dropping items, which is safe because Core drains from initiate onward; a wait longer than
