@@ -26,6 +26,8 @@ import javax.net.ssl.SSLHandshakeException;
  */
 enum TargetOutcome {
 
+    /** The target presented a certificate chain. */
+    FOUND,
     EMPTY,
     FAILED;
 
