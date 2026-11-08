@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.MetadataAttribute;
@@ -49,9 +50,13 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
      * Unknown properties are ignored rather than rejected. A handle is replayed from Core exactly as it was stored, so
      * one written by a newer connector can arrive at an older one, and refusing it would fail a run over a field that
      * older code simply does not need.
+     *
+     * <p>
+     * Map entries are written in key order, so two replicas answering the same request write the same text.
      */
     private static final ObjectMapper MAPPER = new ObjectMapper()
-            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
 
     public enum RunState {
         RUNNING,
@@ -77,6 +82,29 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
     public RunHandle withState(RunState newState) {
         return new RunHandle(newState, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
                 targetsEmpty, yieldByResource, failedByReason);
+    }
+
+    /**
+     * The checkpoint after a slice has committed its targets. The cursor and the processed count move together, which
+     * replay checks; the state reads running whatever it was, because a stopped run that is being drained again has
+     * been resumed.
+     *
+     * @param targets targets the slice committed
+     * @param failed of those, how many failed
+     * @param empty of those, how many held nothing
+     * @param items items the slice numbered
+     */
+    public RunHandle advance(long targets, long failed, long empty, long items, Map<String, Long> yieldDelta,
+            Map<String, Long> failureDelta) {
+        return new RunHandle(RunState.RUNNING, cursorIndex + targets, sequenceHighWater + items, targetsDigest,
+                targetsProcessed + targets, targetsFailed + failed, targetsEmpty + empty,
+                merged(yieldByResource, yieldDelta), merged(failedByReason, failureDelta));
+    }
+
+    private static Map<String, Long> merged(Map<String, Long> counts, Map<String, Long> delta) {
+        Map<String, Long> merged = new java.util.HashMap<>(Objects.requireNonNullElse(counts, Map.of()));
+        delta.forEach((key, count) -> merged.merge(key, count, Long::sum));
+        return Map.copyOf(merged);
     }
 
     /** The checkpoint as Core will replay it. */

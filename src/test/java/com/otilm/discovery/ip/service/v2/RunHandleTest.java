@@ -317,4 +317,50 @@ class RunHandleTest {
         Assertions.assertThrows(ValidationException.class, () -> RunHandle.from(meta));
     }
 
+    // --- advancing past a slice ---
+
+    /** A checkpoint whose cursor and processed count part ways is refused on replay, so every slice moves both. */
+    @Test
+    void advanceKeepsCursorEqualToProcessed() {
+        RunHandle stopped = new RunHandle(RunHandle.RunState.STOPPED, 10L, 40L, "digest", 10L, 2L, 3L,
+                Map.of("certificate", 40L), Map.of("IOException", 2L));
+
+        RunHandle next = stopped
+                .advance(5L, 1L, 2L, 6L, Map.of("certificate", 4L, "cryptographicKey", 2L), Map.of("IOException", 1L));
+
+        Assertions.assertEquals(15L, next.cursorIndex());
+        Assertions.assertEquals(next.cursorIndex(), next.targetsProcessed());
+        Assertions.assertEquals(46L, next.sequenceHighWater());
+        Assertions.assertEquals(3L, next.targetsFailed());
+        Assertions.assertEquals(5L, next.targetsEmpty());
+        Assertions.assertEquals(Map.of("certificate", 44L, "cryptographicKey", 2L), next.yieldByResource());
+        Assertions.assertEquals(Map.of("IOException", 3L), next.failedByReason());
+        Assertions.assertEquals(RunHandle.RunState.RUNNING, next.state());
+        Assertions.assertEquals("digest", next.targetsDigest());
+        Assertions.assertEquals(next, RunHandle.from(next.encode()).orElseThrow(), "the advanced handle replays");
+    }
+
+    /**
+     * Two replicas answering the same request must hand Core the same checkpoint, so the text cannot depend on the
+     * order a map happened to be filled in.
+     */
+    @Test
+    void encodesEqualHandlesToTheSameText() {
+        Map<String, Long> oneWay = new java.util.LinkedHashMap<>();
+        oneWay.put("certificate", 4L);
+        oneWay.put("cryptographicKey", 2L);
+        Map<String, Long> otherWay = new java.util.LinkedHashMap<>();
+        otherWay.put("cryptographicKey", 2L);
+        otherWay.put("certificate", 4L);
+
+        RunHandle first = new RunHandle(RunHandle.RunState.RUNNING, 3L, 6L, "digest", 3L, 0L, 0L, oneWay, Map.of());
+        RunHandle second = new RunHandle(RunHandle.RunState.RUNNING, 3L, 6L, "digest", 3L, 0L, 0L, otherWay, Map.of());
+
+        Assertions.assertEquals(textOf(first), textOf(second));
+    }
+
+    private static Object textOf(RunHandle handle) {
+        return ((MetadataAttributeV3) handle.encode().getFirst()).getContent().getFirst().getData();
+    }
+
 }
