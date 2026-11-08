@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.security.auth.x500.X500Principal;
+import org.awaitility.Awaitility;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
@@ -266,7 +267,10 @@ class SliceScannerTest {
         Assertions.assertEquals(3, slice.next().sequenceHighWater());
     }
 
-    /** A host name that never resolves fails at its deadline and is committed, so the run moves past it. */
+    /**
+     * A host name that never resolves fails at its deadline and is committed, so the run moves past it, and the slice
+     * still answers within its budget plus one probe deadline and the grace.
+     */
     @Test
     void stuckFirstTargetCommitsAsFailedAtItsDeadline() {
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.3", "443", false);
@@ -284,8 +288,15 @@ class SliceScannerTest {
             return chainOf(1);
         };
 
-        SliceScanner.Slice slice = scanner(1_000, 200, probes)
-                .scan(at(targets, 0, 0), targets, 0, ROOMY_ITEMS, ROOMY_BYTES, 3, CERTIFICATES);
+        SliceScanner scanner = scanner(1_000, 200, probes);
+        SliceScanner.Slice slice;
+        try {
+            slice = Assertions
+                    .assertTimeoutPreemptively(Duration.ofMillis(1_000 + 200 + 250 + 1_500), () -> scanner
+                            .scan(at(targets, 0, 0), targets, 0, ROOMY_ITEMS, ROOMY_BYTES, 3, CERTIFICATES));
+        } finally {
+            release.countDown();
+        }
 
         Assertions.assertEquals(3, slice.next().cursorIndex());
         Assertions.assertEquals(1, slice.next().targetsFailed());
@@ -293,8 +304,7 @@ class SliceScannerTest {
         Assertions
                 .assertEquals(List.of(targets.target(1), targets.target(2)),
                         slice.items().stream().map(SliceScannerTest::sourceOf).toList());
-        Assertions.assertEquals(1, abandoned.count());
-        release.countDown();
+        Awaitility.await().atMost(Duration.ofSeconds(2)).until(() -> abandoned.count() == 0);
     }
 
     @Test
