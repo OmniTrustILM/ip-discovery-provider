@@ -344,11 +344,32 @@ class DiscoveryAttributeServiceImplTest {
                         attributeService.readParallelExecutions(List.of(hosts("10.0.0.1"))));
     }
 
+    /**
+     * A run's slices follow one another, so probes inside a slice are the only way to speed up one run: a mostly dark
+     * sweep at 500 ms connect timeouts needs about a thousand in flight to reach two thousand targets a second.
+     */
+    @Test
+    void acceptsAParallelismOfAThousand() {
+        Assertions.assertEquals(1_000, attributeService.readParallelExecutions(List.of(parallelism(1_000))));
+    }
+
+    @Test
+    void publishesTheRangeItAccepts() {
+        DataAttributeV3 parallelism = (DataAttributeV3) attributeService
+                .getDefinition(UUID.fromString(DiscoveryAttributeServiceImpl.DATA_ATTRIBUTE_PARALLEL_EXECUTIONS_UUID));
+        com.otilm.api.model.common.attribute.common.constraint.data.RangeAttributeConstraintData range = (com.otilm.api.model.common.attribute.common.constraint.data.RangeAttributeConstraintData) parallelism
+                .getConstraints()
+                .getFirst()
+                .getData();
+
+        Assertions.assertEquals(1, range.getFrom());
+        Assertions.assertEquals(1_000, range.getTo());
+    }
+
     @Test
     void refusesAParallelismOutsideThePublishedRange() {
         List<RequestAttribute> belowTheRange = List.of(parallelism(0));
-        List<RequestAttribute> aboveTheRange = List
-                .of(parallelism(DiscoveryAttributeServiceImpl.PARALLEL_EXECUTIONS_MAX + 1));
+        List<RequestAttribute> aboveTheRange = List.of(parallelism(1_001));
 
         Assertions
                 .assertThrows(ValidationException.class, () -> attributeService.readParallelExecutions(belowTheRange));

@@ -46,7 +46,7 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
     public static final String INFO_ATTRIBUTE_SCAN_TARGETS_NAME = "info_scanTargets";
 
     public static final int PARALLEL_EXECUTIONS_MIN = 1;
-    public static final int PARALLEL_EXECUTIONS_MAX = 100;
+    public static final int PARALLEL_EXECUTIONS_MAX = 1_000;
 
     /** Applied when a run supplies no ports at all, which is what v1 got from a single-valued default. */
     public static final String DEFAULT_PORT = "443";
@@ -220,7 +220,9 @@ public class DiscoveryAttributeServiceImpl implements DiscoveryAttributeService 
             large scan: `1-65535` against a `/24` is over sixteen million probes. Narrow either side where you
             can.
 
-            Probes run sequentially unless **Number of parallel executions** is raised, up to 100.
+            Probes run sequentially unless **Number of parallel executions** is raised, up to 1000. A connector
+            instance shares a limit on probes in flight between the discoveries it serves, so a busy instance may
+            run fewer at once.
             """;
 
     private static DataAttributeV3 hosts() {

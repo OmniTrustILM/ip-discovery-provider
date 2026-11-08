@@ -7,10 +7,10 @@
       "constraints" : [ {
         "data" : {
           "from" : 1,
-          "to" : 100
+          "to" : 1000
         },
         "description" : "Allowed values for parallel executions",
-        "errorMessage" : "Invalid value for parallel executions, it can be between 1 and 100",
+        "errorMessage" : "Invalid value for parallel executions, it can be between 1 and 1000",
         "type" : "range"
       } ],
       "content" : [ {
@@ -77,7 +77,7 @@
     }, {
       "content" : [ {
         "contentType" : "text",
-        "data" : "Each entry under **Hosts** is one target, given as any of:\n- IP address (`10.100.2.14`)\n- Hostname (`www.example.com`)\n- IP address range (`10.1.1.20-10.1.1.150`)\n- CIDR subnet (`172.16.1.0/24`)\n\nA subnet skips its network and broadcast addresses, except a `/31`, which scans both of its addresses,\nand a `/32`, which scans the one host it names.\n\nEach entry under **Ports** is a single port (`443`) or a range (`9000-10000`).\nLeave Ports empty to scan 443.\n\nA scan probes every combination of a host and a port, so a wide subnet with a wide port range is a\nlarge scan: `1-65535` against a `/24` is over sixteen million probes. Narrow either side where you\ncan.\n\nProbes run sequentially unless **Number of parallel executions** is raised, up to 100.\n",
+        "data" : "Each entry under **Hosts** is one target, given as any of:\n- IP address (`10.100.2.14`)\n- Hostname (`www.example.com`)\n- IP address range (`10.1.1.20-10.1.1.150`)\n- CIDR subnet (`172.16.1.0/24`)\n\nA subnet skips its network and broadcast addresses, except a `/31`, which scans both of its addresses,\nand a `/32`, which scans the one host it names.\n\nEach entry under **Ports** is a single port (`443`) or a range (`9000-10000`).\nLeave Ports empty to scan 443.\n\nA scan probes every combination of a host and a port, so a wide subnet with a wide port range is a\nlarge scan: `1-65535` against a `/24` is over sixteen million probes. Narrow either side where you\ncan.\n\nProbes run sequentially unless **Number of parallel executions** is raised, up to 1000. A connector\ninstance shares a limit on probes in flight between the discoveries it serves, so a busy instance may\nrun fewer at once.\n",
         "reference" : null
       } ],
       "contentType" : "text",
