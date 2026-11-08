@@ -19,7 +19,9 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.security.auth.x500.X500Principal;
 import org.awaitility.Awaitility;
@@ -54,8 +56,13 @@ class SliceScannerTest {
     }
 
     private SliceScanner scanner(long scanBudgetMs, long probeDeadlineMs, ConnectionService probes) {
+        return scanner(scanBudgetMs, probeDeadlineMs, probes, new ProbePermits(2_000));
+    }
+
+    private SliceScanner scanner(long scanBudgetMs, long probeDeadlineMs, ConnectionService probes,
+            ProbePermits permits) {
         return new SliceScanner(new TargetProber(probes, abandoned),
-                new SliceSettings(scanBudgetMs, 32, 256, probeDeadlineMs));
+                new SliceSettings(scanBudgetMs, 32, 256, probeDeadlineMs), permits);
     }
 
     private SliceScanner scanner(ConnectionService probes) {
@@ -305,6 +312,93 @@ class SliceScannerTest {
                 .assertEquals(List.of(targets.target(1), targets.target(2)),
                         slice.items().stream().map(SliceScannerTest::sourceOf).toList());
         Awaitility.await().atMost(Duration.ofSeconds(2)).until(() -> abandoned.count() == 0);
+    }
+
+    // --- the pod's probe limit ---
+
+    /** Each slice may ask for a thousand probes; the pod as a whole holds the line on sockets in flight. */
+    @Test
+    void podLimitCapsProbesInFlightAcrossConcurrentSlices() throws Exception {
+        TargetEnumeration first = TargetEnumeration.of("10.0.0.1-10.0.0.20", "443", false);
+        TargetEnumeration second = TargetEnumeration.of("10.0.1.1-10.0.1.20", "443", false);
+        AtomicInteger inFlight = new AtomicInteger();
+        AtomicInteger mostInFlight = new AtomicInteger();
+        ConnectionService probes = url -> {
+            mostInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+            try {
+                sleep(30);
+                return chainOf(1);
+            } finally {
+                inFlight.decrementAndGet();
+            }
+        };
+        ProbePermits permits = new ProbePermits(4);
+        SliceScanner scanner = scanner(8_000, 2_000, probes, permits);
+
+        CompletableFuture<SliceScanner.Slice> one = CompletableFuture
+                .supplyAsync(() -> scanner.scan(at(first, 0, 0), first, 0, ROOMY_ITEMS, ROOMY_BYTES, 10, CERTIFICATES));
+        CompletableFuture<SliceScanner.Slice> other = CompletableFuture
+                .supplyAsync(
+                        () -> scanner.scan(at(second, 0, 0), second, 0, ROOMY_ITEMS, ROOMY_BYTES, 10, CERTIFICATES));
+
+        Assertions.assertEquals(20, one.get(30, TimeUnit.SECONDS).next().cursorIndex());
+        Assertions.assertEquals(20, other.get(30, TimeUnit.SECONDS).next().cursorIndex());
+        Assertions.assertTrue(mostInFlight.get() <= 4, "at most 4 probes at once, saw " + mostInFlight.get());
+        Assertions.assertEquals(4, permits.available(), "every permit comes back");
+    }
+
+    /**
+     * A pod at its limit slows a slice down; it never fails the call. The first target goes out at the end of the
+     * budget even without a permit, so the run still moves and the answer still comes inside its bound.
+     */
+    @Test
+    void sliceShortOfPermitsStillAnswersWithinItsBudgetAndCommitsATarget() {
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.10", "443", false);
+        ProbePermits permits = new ProbePermits(1);
+        Assertions.assertTrue(permits.tryAcquire(), "another slice holds the only permit");
+        SliceScanner scanner = scanner(300, 500, answering(1), permits);
+
+        SliceScanner.Slice slice = Assertions
+                .assertTimeoutPreemptively(Duration.ofMillis(300 + 500 + 250 + 1_500),
+                        () -> scanner.scan(at(targets, 0, 0), targets, 0, ROOMY_ITEMS, ROOMY_BYTES, 4, CERTIFICATES));
+
+        Assertions.assertEquals(1, slice.next().cursorIndex());
+        Assertions.assertTrue(slice.more());
+        Assertions.assertEquals(0, permits.available(), "a probe launched without a permit gives none back");
+    }
+
+    /** A probe given up on still holds a socket or a thread, so it keeps its permit until it really returns. */
+    @Test
+    void abandonedProbeKeepsItsPermitUntilItReturns() {
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.3", "443", false);
+        CountDownLatch release = new CountDownLatch(1);
+        ConnectionService probes = url -> {
+            if (url.equals(targets.target(0))) {
+                while (release.getCount() > 0) {
+                    try {
+                        release.await();
+                    } catch (InterruptedException ignored) {
+                        // a lookup the JVM cannot interrupt
+                    }
+                }
+            }
+            return chainOf(1);
+        };
+        ProbePermits permits = new ProbePermits(3);
+
+        try {
+            scanner(1_000, 200, probes, permits)
+                    .scan(at(targets, 0, 0), targets, 0, ROOMY_ITEMS, ROOMY_BYTES, 3, CERTIFICATES);
+            Assertions.assertEquals(2, permits.available());
+        } finally {
+            release.countDown();
+        }
+        Awaitility.await().atMost(Duration.ofSeconds(2)).until(() -> permits.available() == 3);
+    }
+
+    @Test
+    void podLimitMustBePositive() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new ProbePermits(0));
     }
 
     @Test

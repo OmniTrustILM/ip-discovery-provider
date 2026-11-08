@@ -81,7 +81,8 @@ class CheckpointedRunServiceTest {
     }
 
     private CheckpointedRunService service(SliceSettings settings, ConnectionService probes) {
-        return new CheckpointedRunService(new SliceScanner(new TargetProber(probes, abandoned), settings), settings,
+        return new CheckpointedRunService(
+                new SliceScanner(new TargetProber(probes, abandoned), settings, new ProbePermits(2_000)), settings,
                 abandoned, attributeService());
     }
 

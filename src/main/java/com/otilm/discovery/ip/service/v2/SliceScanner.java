@@ -7,6 +7,7 @@ import com.otilm.discovery.ip.util.TargetEnumeration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,20 +21,23 @@ import org.springframework.stereotype.Component;
  * Turns a replayed checkpoint into one bounded page and the checkpoint after it.
  *
  * <p>
- * Probes are launched in enumeration order until the scan budget runs out, the finished probes have produced a page, or
- * the enumeration ends. Every launched probe then completes by its own deadline, so the slice commits each of them
- * unless the page limits cut it short, and a target cut off is scanned again by the next slice. Nothing survives the
- * call: the same checkpoint and the same probe outcomes give the same page.
+ * Probes are launched in enumeration order, as many at once as the run's parallelism and the node's probe permits
+ * allow, until the scan budget runs out, the finished probes have produced a page, or the enumeration ends. Every
+ * launched probe then completes by its own deadline, so the slice commits each of them unless the page limits cut it
+ * short, and a target cut off is scanned again by the next slice. Nothing survives the call: the same checkpoint and
+ * the same probe outcomes give the same page.
  */
 @Component
 public class SliceScanner {
 
     private final TargetProber prober;
     private final SliceSettings settings;
+    private final ProbePermits permits;
 
-    public SliceScanner(TargetProber prober, SliceSettings settings) {
+    public SliceScanner(TargetProber prober, SliceSettings settings, ProbePermits permits) {
         this.prober = prober;
         this.settings = settings;
+        this.permits = permits;
     }
 
     /**
@@ -45,6 +49,9 @@ public class SliceScanner {
 
     private record Launched(long index, CompletableFuture<TargetResult> probe, long deadlineNanos) {
     }
+
+    /** How often a slice with free slots but no permit looks again; its own probes finishing wake it sooner. */
+    private static final long PERMIT_RETRY_NANOS = TimeUnit.MILLISECONDS.toNanos(20);
 
     /**
      * @throws TargetTooLargeException if the first target alone exceeds the page limits
@@ -65,7 +72,9 @@ public class SliceScanner {
         long budgetEnds = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(settings.scanBudgetMs());
         long probeDeadline = TimeUnit.MILLISECONDS.toNanos(settings.probeDeadlineMs());
         Map<Long, TargetResult> settled = new HashMap<>();
-        List<Launched> inFlight = new ArrayList<>();
+        // In launch order, which is deadline order too: every launch takes a later "now". A slice may have a thousand
+        // probes in flight, so the loop finds the next one due at the head instead of scanning them all.
+        Set<Launched> inFlight = new LinkedHashSet<>();
         BlockingQueue<Launched> finished = new LinkedBlockingQueue<>();
         long next = cursor;
         long finishedItems = 0;
@@ -83,31 +92,35 @@ public class SliceScanner {
             long now = System.nanoTime();
             for (Iterator<Launched> overdue = inFlight.iterator(); overdue.hasNext();) {
                 Launched launched = overdue.next();
-                if (now - launched.deadlineNanos() >= 0) {
-                    overdue.remove();
-                    TargetResult result = settle(launched, settled);
-                    finishedItems += result.items().size();
-                    finishedBytes += result.itemBytes();
+                if (now - launched.deadlineNanos() < 0) {
+                    break;
                 }
+                overdue.remove();
+                TargetResult result = settle(launched, settled);
+                finishedItems += result.items().size();
+                finishedBytes += result.itemBytes();
             }
             // The first target always launches, so a slice moves the run forward however small its budget.
             boolean outOfBudget = next > cursor && now - budgetEnds >= 0;
             if (next >= targets.size() || outOfBudget || finishedItems >= maxItems || finishedBytes >= maxBytes) {
                 break;
             }
+            long wakeAt = inFlight.isEmpty()
+                    ? budgetEnds
+                    : earlier(budgetEnds, inFlight.iterator().next().deadlineNanos());
             if (inFlight.size() < Math.max(1, parallelism)) {
-                Launched launched = new Launched(next, prober.start(next, targets.target(next), resources),
-                        now + probeDeadline);
-                launched.probe().whenComplete((result, failure) -> finished.add(launched));
-                inFlight.add(launched);
-                next++;
-                continue;
-            }
-            long wakeAt = budgetEnds;
-            for (Launched launched : inFlight) {
-                if (launched.deadlineNanos() - wakeAt < 0) {
-                    wakeAt = launched.deadlineNanos();
+                boolean permitted = permits.tryAcquire();
+                // A node at its probe limit slows the slice down rather than failing it: the first target goes out
+                // without a permit once the budget is spent, so the run still moves and the answer stays in bound.
+                if (permitted || (next == cursor && now - budgetEnds >= 0)) {
+                    inFlight
+                            .add(launch(next, targets.target(next), resources, now + probeDeadline, permitted,
+                                    finished));
+                    next++;
+                    continue;
                 }
+                awaitAny(finished, Math.min(wakeAt - now, PERMIT_RETRY_NANOS));
+                continue;
             }
             awaitAny(finished, wakeAt - now);
         }
@@ -122,10 +135,39 @@ public class SliceScanner {
         return ordered;
     }
 
+    /**
+     * The permit goes back when the probe's thread returns, not when the slice gives up on it: an abandoned probe still
+     * holds its socket or its thread.
+     */
+    private Launched launch(long index, String url, Set<Resource> resources, long deadlineNanos, boolean permitted,
+            BlockingQueue<Launched> finished) {
+        CompletableFuture<TargetResult> probe;
+        try {
+            probe = prober.start(index, url, resources);
+        } catch (RuntimeException e) {
+            if (permitted) {
+                permits.release();
+            }
+            throw e;
+        }
+        Launched launched = new Launched(index, probe, deadlineNanos);
+        probe.whenComplete((result, failure) -> {
+            if (permitted) {
+                permits.release();
+            }
+            finished.add(launched);
+        });
+        return launched;
+    }
+
     private TargetResult settle(Launched launched, Map<Long, TargetResult> settled) {
         TargetResult result = prober.await(launched.probe(), launched.index(), launched.deadlineNanos());
         settled.put(launched.index(), result);
         return result;
+    }
+
+    private static long earlier(long oneNanos, long otherNanos) {
+        return oneNanos - otherNanos <= 0 ? oneNanos : otherNanos;
     }
 
     /** Waits for a probe to finish, leaving it queued for the loop to settle. */

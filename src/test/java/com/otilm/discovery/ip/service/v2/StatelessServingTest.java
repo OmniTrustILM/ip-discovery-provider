@@ -105,7 +105,8 @@ class StatelessServingTest {
         AbandonedProbes abandoned = new AbandonedProbes();
         Properties properties = new Properties();
         properties.setProperty("version", "1.8.0-SNAPSHOT");
-        return new CheckpointedRunService(new SliceScanner(new TargetProber(network, abandoned), settings), settings,
+        return new CheckpointedRunService(
+                new SliceScanner(new TargetProber(network, abandoned), settings, new ProbePermits(2_000)), settings,
                 abandoned, new DiscoveryAttributeServiceImpl(new BuildProperties(properties)));
     }
 
