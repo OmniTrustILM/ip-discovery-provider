@@ -20,13 +20,15 @@ discovery:
     # max-concurrent caps the slices this node scans at once; beyond it a results call answers 503 and Core retries.
     # max-probes-in-flight caps probes in flight on this node across all its slices. A run may ask for up to 1000 at
     # once, so without it 32 slices could open 32000 sockets. A slice that finds no permit launches fewer probes and
-    # still answers within its budget; it never answers 503 for this. A probe holds its permit until its thread
-    # returns, so stuck lookups count against it too.
+    # still answers within its budget; it never answers 503 for this. A slice that waits out its whole budget without
+    # a permit launches its first target anyway, so a starved run still moves: the limit can be exceeded by one probe
+    # per running slice. A probe holds its permit until its thread returns, so stuck lookups count against it too.
     # max-abandoned-probes caps probe threads still blocked past their deadline, such as a host-name lookup the JVM
     # cannot interrupt; beyond it a results call answers 503 until they drain.
-    # Memory: a slice holds at most one page plus the targets it has in flight, so a node holds at most
-    # max-concurrent pages plus max-probes-in-flight targets. With Core's default 5 MiB pages and about 12 KB per
-    # target that is roughly 32 x 5 MiB + 2000 x 12 KB, about 185 MB; at the 10 MiB transport cap, about 345 MB.
+    # Memory: a slice holds at most one page plus the targets it has in flight, and the outcomes of at most 16384
+    # targets (about 1 MB), so a node holds at most max-concurrent pages and outcome lists, plus max-probes-in-flight
+    # targets. With Core's default 5 MiB pages and about 12 KB per target that is roughly
+    # 32 x 5 MiB + 32 x 1 MB + 2000 x 12 KB, about 220 MB; at the 10 MiB transport cap, about 380 MB.
     scan-budget-ms: ${DISCOVERY_SLICE_SCAN_BUDGET_MS:8000}
     max-concurrent: ${DISCOVERY_SLICE_MAX_CONCURRENT:32}
     max-probes-in-flight: ${DISCOVERY_SLICE_MAX_PROBES_IN_FLIGHT:2000}
