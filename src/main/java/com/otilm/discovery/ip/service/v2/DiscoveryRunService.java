@@ -21,7 +21,7 @@ import com.otilm.api.model.connector.discovery.v2.DiscoveryStopResponseDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryV2ScopedRequestDto;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.api.v2.CheckpointLostException;
-import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.ConnectorBusyException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.service.ConnectionService;
@@ -127,7 +127,7 @@ public class DiscoveryRunService {
             admission = budget.admit(runId);
         }
         if (admission == BufferBudget.Admission.AT_CAPACITY) {
-            throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
+            throw new ConnectorBusyException("this node is already scanning as many runs as it can feed");
         }
         if (!registry.register(runId, handle)) {
             budget.close(runId);
@@ -309,7 +309,7 @@ public class DiscoveryRunService {
             // rebuilt run that only answers status and drains holds nothing, and charging it against the scanning
             // cap would refuse the ticks that keep a stopped run alive.
             if (budget.admit(runId) == BufferBudget.Admission.AT_CAPACITY) {
-                throw new NodeAtCapacityException("this node is already scanning as many runs as it can feed");
+                throw new ConnectorBusyException("this node is already scanning as many runs as it can feed");
             }
 
             RunHandle running = registry

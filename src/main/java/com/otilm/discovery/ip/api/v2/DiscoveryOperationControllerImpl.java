@@ -9,20 +9,20 @@ import com.otilm.api.model.connector.discovery.v2.DiscoveryRunRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryStatusResponseDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryStopResponseDto;
 import com.otilm.discovery.ip.ConnectorV2Api;
-import com.otilm.discovery.ip.service.v2.DiscoveryRunService;
+import com.otilm.discovery.ip.service.v2.CheckpointedRunService;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The run lifecycle on the wire. Thin on purpose: the sequencing, the idempotency and the bounds all live in
- * {@link DiscoveryRunService}, where they can be exercised without a servlet.
+ * The run lifecycle on the wire. Thin on purpose: the slice, the position checks and the bounds all live in
+ * {@link CheckpointedRunService}, where they can be exercised without a servlet.
  */
 @RestController
 @ConnectorV2Api
 public class DiscoveryOperationControllerImpl implements DiscoveryOperationController {
 
-    private final DiscoveryRunService runService;
+    private final CheckpointedRunService runService;
 
-    public DiscoveryOperationControllerImpl(DiscoveryRunService runService) {
+    public DiscoveryOperationControllerImpl(CheckpointedRunService runService) {
         this.runService = runService;
     }
 

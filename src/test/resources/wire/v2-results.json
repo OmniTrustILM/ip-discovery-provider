@@ -2,6 +2,28 @@
   "status" : 200,
   "contentType" : "application/json",
   "body" : {
+    "checkpoint" : [ {
+      "content" : [ {
+        "contentType" : "string",
+        "data" : "{\"state\":\"RUNNING\",\"cursorIndex\":1,\"sequenceHighWater\":2,\"targetsDigest\":\"<digest>\",\"targetsProcessed\":1,\"targetsFailed\":0,\"targetsEmpty\":0,\"yieldByResource\":{\"certificates\":1,\"keys\":1},\"failedByReason\":{}}",
+        "reference" : "{\"state\":\"RUNNING\",\"cursorIndex\":1,\"sequenceHighWater\":2,\"targetsDigest\":\"<digest>\",\"targetsProcessed\":1,\"targetsFailed\":0,\"targetsEmpty\":0,\"yieldByResource\":{\"certificates\":1,\"keys\":1},\"failedByReason\":{}}"
+      } ],
+      "contentType" : "string",
+      "description" : "Discovery v2 run checkpoint",
+      "name" : "meta_runHandle",
+      "properties" : {
+        "global" : false,
+        "group" : null,
+        "label" : "Run checkpoint",
+        "overwrite" : true,
+        "protectionLevel" : "none",
+        "visible" : false
+      },
+      "schemaVersion" : "v3",
+      "type" : "meta",
+      "uuid" : "52cf88e4-6b87-40f5-a89d-9b6e6d676119",
+      "version" : 3
+    } ],
     "highestSequence" : 2,
     "items" : [ {
       "discoveredAt" : "9999-99-99T99:99:99.9<zone>",

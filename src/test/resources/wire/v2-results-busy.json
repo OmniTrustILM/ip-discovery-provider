@@ -1,0 +1,15 @@
+{
+  "status" : 503,
+  "contentType" : "application/problem+json",
+  "body" : {
+    "detail" : "this drain does not offer checkpointed delivery, which this connector requires; a Core that offers it can take the retry",
+    "errorCode" : "SERVICE_UNAVAILABLE",
+    "instance" : "/v2/discoveryProvider/discoveries/results",
+    "retryAfterSeconds" : 5,
+    "retryable" : true,
+    "status" : 503,
+    "timestamp" : "9999-99-99T99:99:99.9<zone>",
+    "title" : "Service unavailable",
+    "type" : "https://docs.otilm.com/problems/common/SERVICE_UNAVAILABLE"
+  }
+}

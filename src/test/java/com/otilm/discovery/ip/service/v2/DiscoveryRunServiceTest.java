@@ -16,7 +16,7 @@ import com.otilm.api.model.connector.discovery.v2.DiscoveryRunRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryStatusResponseDto;
 import com.otilm.api.model.core.auth.Resource;
-import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.ConnectorBusyException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
@@ -203,7 +203,7 @@ class DiscoveryRunServiceTest {
         service.initiate(initiateRequest(UUID.randomUUID(), "10.0.0.2"));
 
         var third = initiateRequest(UUID.randomUUID(), "10.0.0.3");
-        Assertions.assertThrows(NodeAtCapacityException.class, () -> service.initiate(third));
+        Assertions.assertThrows(ConnectorBusyException.class, () -> service.initiate(third));
     }
 
     @Test

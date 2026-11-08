@@ -14,7 +14,7 @@ import com.otilm.api.model.connector.discovery.v2.DiscoveryRunRequestDto;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryRunState;
 import com.otilm.api.model.connector.discovery.v2.DiscoveryStopResponseDto;
 import com.otilm.api.model.core.auth.Resource;
-import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.ConnectorBusyException;
 import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.service.v2.impl.DiscoveryAttributeServiceImpl;
@@ -359,7 +359,7 @@ class RunAdmissionTest {
         service.status(runRequest(stopped, stoppedCheckpoint().encode()));
 
         var resume = runRequest(stopped, null);
-        Assertions.assertThrows(NodeAtCapacityException.class, () -> service.resume(resume));
+        Assertions.assertThrows(ConnectorBusyException.class, () -> service.resume(resume));
         Assertions
                 .assertEquals(DiscoveryRunState.STOPPED, registry.state(stopped).orElseThrow(),
                         "the run stays resumable for when the node has room");
