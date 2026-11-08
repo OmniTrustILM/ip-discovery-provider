@@ -183,6 +183,19 @@ class TargetOutcomeTest {
         Assertions.assertEquals("IOException", TargetOutcome.reasonOf(failure));
     }
 
+    /**
+     * A reason is a key in the checkpoint, which refuses a blank one on replay. An anonymous exception class has no
+     * simple name, and naming a failure by it would end the run at the next page.
+     */
+    @Test
+    void aFailureOfAnAnonymousClassIsStillNamed() {
+        IOException anonymous = new IOException("no usable answer") {
+        };
+
+        Assertions.assertFalse(TargetOutcome.reasonOf(anonymous).isBlank());
+        Assertions.assertFalse(TargetOutcome.unusableCertificate(anonymous).contains("()"));
+    }
+
     @Test
     void aHandshakeFailureWithoutAnAlertSaysSo() {
         Assertions
