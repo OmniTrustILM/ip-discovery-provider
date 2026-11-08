@@ -23,23 +23,14 @@ discovery:
     scan-budget-ms: ${DISCOVERY_SLICE_SCAN_BUDGET_MS:8000}
     max-concurrent: ${DISCOVERY_SLICE_MAX_CONCURRENT:32}
     max-abandoned-probes: ${DISCOVERY_SLICE_MAX_ABANDONED_PROBES:256}
-  buffer:
-    # The undrained results of the live runs on this node. Production blocks when a bound is reached rather than
-    # dropping items, which is safe because Core drains from initiate onward; a wait longer than
-    # backpressure-wait-ms fails the run naming the bound it hit. All must be positive.
-    max-runs: ${DISCOVERY_BUFFER_MAX_RUNS:8}
-    max-items-per-run: ${DISCOVERY_BUFFER_MAX_ITEMS_PER_RUN:50000}
-    max-bytes-per-run: ${DISCOVERY_BUFFER_MAX_BYTES_PER_RUN:134217728}
-    max-total-bytes: ${DISCOVERY_BUFFER_MAX_TOTAL_BYTES:536870912}
-    backpressure-wait-ms: ${DISCOVERY_BUFFER_BACKPRESSURE_WAIT_MS:120000}
-  run:
-    # The connector's own deadline, measured as time since the platform last drove the run. Core's cleanup after a
-    # failed start is best-effort, so without this an orphaned scan holds its buffer and threads until a restart.
-    idle-deadline-ms: ${DISCOVERY_RUN_IDLE_DEADLINE_MS:1800000}
-    reaper-interval-ms: ${DISCOVERY_RUN_REAPER_INTERVAL_MS:60000}
 server:
   port: ${PORT:8080}
+  # A pod being replaced finishes the results calls it is scanning instead of cutting them; a slice answers within
+  # 18 s, inside the 25 s shutdown phase below.
+  shutdown: graceful
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
   datasource:
     driver-class-name: org.postgresql.Driver
     password: ${JDBC_PASSWORD}

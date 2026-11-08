@@ -9,7 +9,6 @@ import com.otilm.discovery.ip.api.v2.CheckpointLostException;
 import com.otilm.discovery.ip.api.v2.ConnectorBusyException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
-import com.otilm.discovery.ip.service.v2.BufferBudget;
 import com.otilm.discovery.ip.service.v2.TargetTooLargeException;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
@@ -182,18 +181,6 @@ class ProblemDetailsHandlingAdviceTest {
         Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT.value(), problem.getStatus());
         Assertions.assertEquals(ErrorCode.VALIDATION_FAILED, errorCodeOf(problem));
         Assertions.assertTrue(problem.getDetail().contains("10 items"), problem.getDetail());
-    }
-
-    /** The bound that stopped the run is the message, so it reaches the wire rather than only the log. */
-    @Test
-    void answers503AndServiceUnavailableWhenARunOutgrowsItsBuffer() {
-        ProblemDetail problem = advice
-                .handleBufferLimit(
-                        new BufferBudget.BufferLimitExceededException("run holds 100000 items, the per-run cap"));
-
-        Assertions.assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), problem.getStatus());
-        Assertions.assertEquals(ErrorCode.SERVICE_UNAVAILABLE, errorCodeOf(problem));
-        Assertions.assertTrue(problem.getDetail().contains("per-run cap"), problem.getDetail());
     }
 
     /** The contract's answer for a stop that comes too late: Core keeps the run as it was rather than stopping it. */

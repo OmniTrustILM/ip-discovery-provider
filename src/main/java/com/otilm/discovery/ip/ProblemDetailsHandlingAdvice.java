@@ -10,7 +10,6 @@ import com.otilm.discovery.ip.api.v2.CheckpointLostException;
 import com.otilm.discovery.ip.api.v2.ConnectorBusyException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
-import com.otilm.discovery.ip.service.v2.BufferBudget;
 import com.otilm.discovery.ip.service.v2.TargetTooLargeException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -147,7 +146,7 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
 
     /**
      * Core reads a 404 carrying this code as definitive: the run cannot be recovered by retrying, and it ends FAILED.
-     * That is the honest answer for a run this node never had, or one whose buffer a restart took with it.
+     * That is the honest answer for a checkpoint that disagrees with Core's cursor or with the run's targets.
      */
     @ExceptionHandler(UnknownRunException.class)
     public ProblemDetail handleUnknownRun(UnknownRunException ex) {
@@ -204,16 +203,6 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     public ProblemDetail handleTargetTooLarge(TargetTooLargeException ex) {
         LOG.error("Target larger than a page: {}", ex.getMessage());
         return ProblemDetailExtended.fromErrorCode(ErrorCode.VALIDATION_FAILED, ex.getMessage(), null, null);
-    }
-
-    /**
-     * The run cannot continue and says which bound stopped it. Reported rather than truncated: a short answer would
-     * look like a completed scan that found less.
-     */
-    @ExceptionHandler(BufferBudget.BufferLimitExceededException.class)
-    public ProblemDetail handleBufferLimit(BufferBudget.BufferLimitExceededException ex) {
-        LOG.error("Buffer limit reached: {}", ex.getMessage());
-        return ProblemDetailExtended.fromErrorCode(ErrorCode.SERVICE_UNAVAILABLE, ex.getMessage(), null, null);
     }
 
     @ExceptionHandler(NotFoundException.class)
