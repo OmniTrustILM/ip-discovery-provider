@@ -7,6 +7,7 @@ import com.otilm.discovery.ip.dto.ConnectionResponse;
 import com.otilm.discovery.ip.service.ConnectionService;
 import com.otilm.discovery.ip.util.TargetEnumeration;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.security.KeyPair;
@@ -394,6 +395,67 @@ class SliceScannerTest {
             release.countDown();
         }
         Awaitility.await().atMost(Duration.ofSeconds(2)).until(() -> permits.available() == 3);
+    }
+
+    // --- what a slice keeps ---
+
+    /**
+     * Empty targets add nothing to the page limits, so a sweep of closed ports that answer at once would otherwise keep
+     * every outcome its budget allowed. A slice stops launching at a fixed number of targets instead.
+     */
+    @Test
+    void targetsKeptPerSliceAreBounded() {
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.0/16", "443", false);
+        ConnectionService refused = url -> {
+            throw new ConnectException("Connection refused");
+        };
+
+        SliceScanner.Slice slice = scanner(8_000, 2_000, refused)
+                .scan(at(targets, 0, 0), targets, 0, ROOMY_ITEMS, ROOMY_BYTES, 100, CERTIFICATES);
+
+        Assertions.assertEquals(SliceScanner.MAX_TARGETS_PER_SLICE, slice.next().cursorIndex());
+        Assertions.assertEquals(SliceScanner.MAX_TARGETS_PER_SLICE, slice.next().targetsEmpty());
+        Assertions.assertTrue(slice.more());
+    }
+
+    /**
+     * A probe abandoned past its deadline keeps running, and must not keep the slice's other results alive with it once
+     * the answer has gone out.
+     */
+    @Test
+    void lateResultsAreReleasedWhenTheSliceReturns() {
+        TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
+        CountDownLatch release = new CountDownLatch(1);
+        ConnectionService probes = url -> {
+            if (url.equals(targets.target(0))) {
+                while (release.getCount() > 0) {
+                    try {
+                        release.await();
+                    } catch (InterruptedException ignored) {
+                        // a lookup the JVM cannot interrupt
+                    }
+                }
+            } else {
+                sleep(100);
+            }
+            return chainOf(1);
+        };
+
+        try {
+            SliceScanner.Slice slice = scanner(1_000, 300, probes)
+                    .scan(at(targets, 0, 0), targets, 0, ROOMY_ITEMS, ROOMY_BYTES, 4, CERTIFICATES);
+            List<WeakReference<DiscoveredItemDto>> late = slice.items().stream().map(WeakReference::new).toList();
+            Assertions.assertEquals(3, late.size());
+            Assertions.assertEquals(1, abandoned.count());
+            slice = null;
+
+            Awaitility.await().atMost(Duration.ofSeconds(5)).pollInterval(Duration.ofMillis(50)).until(() -> {
+                System.gc();
+                return late.stream().allMatch(reference -> reference.get() == null);
+            });
+        } finally {
+            release.countDown();
+        }
     }
 
     @Test
