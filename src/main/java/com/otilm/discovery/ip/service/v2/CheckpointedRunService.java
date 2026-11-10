@@ -189,7 +189,13 @@ public class CheckpointedRunService {
     public DiscoveryStopResponseDto stop(DiscoveryRunRequestDto request) {
         requireSupported(request.getResources());
         RunHandle handle = requireHandle(request);
-        long total = enumerate(request).size();
+        TargetEnumeration targets = enumerate(request);
+        // Checked before the cursor is read: against a different, shorter set of targets it would look finished.
+        if (!targets.digest().equals(handle.targetsDigest())) {
+            logger.warn("Run {} replayed a checkpoint for a different set of targets", request.getRunId());
+            throw new UnknownRunException(request.getRunId(), DIFFERENT_TARGETS);
+        }
+        long total = targets.size();
         if (handle.cursorIndex() >= total) {
             // Core allows a stop while its own status is still in progress, after this connector has reported the run
             // completed. A success would have Core record a finished run as stopped.

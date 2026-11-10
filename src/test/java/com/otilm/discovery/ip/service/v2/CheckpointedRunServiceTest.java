@@ -449,6 +449,18 @@ class CheckpointedRunServiceTest {
         Assertions.assertThrows(RunPastPointOfNoReturnException.class, () -> service.stop(request));
     }
 
+    /**
+     * The cursor indexes into the targets the checkpoint was written for. Read against a different, shorter set it
+     * would look finished, and the run would be refused as completed instead of as a checkpoint that no longer fits.
+     */
+    @Test
+    void stopOfADifferentEnumerationIsNotTracked() {
+        DiscoveryRunRequestDto request = scoped(new DiscoveryRunRequestDto(), "10.0.0.1", at(2, 4));
+        CheckpointedRunService service = service();
+
+        Assertions.assertThrows(UnknownRunException.class, () -> service.stop(request));
+    }
+
     @Test
     void resumeChoosesCheckpointedWithoutACheckpoint() {
         DiscoveryInitiateResponseDto response = service().resume(run(at(2, 4)));
