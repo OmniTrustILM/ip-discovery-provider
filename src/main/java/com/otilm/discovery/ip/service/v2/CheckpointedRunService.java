@@ -59,7 +59,14 @@ public class CheckpointedRunService {
 
     /** The bounds a drain that names none gets. */
     private static final int DEFAULT_MAX_ITEMS = 500;
-    private static final long DEFAULT_MAX_BYTES = 5L * 1024 * 1024;
+
+    /**
+     * Never above the transport cap less the room a checkpointed response keeps for its checkpoint, which does not
+     * count against maxBytes.
+     */
+    private static final long DEFAULT_MAX_BYTES = Math
+            .min(5L * 1024 * 1024,
+                    DiscoveryDrainRequestDto.MAX_BYTES_CAP - DiscoveryDrainRequestDto.CHECKPOINTED_RESPONSE_RESERVE);
 
     private final SliceScanner scanner;
     private final SliceSettings settings;

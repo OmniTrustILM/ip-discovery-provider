@@ -147,7 +147,9 @@ class CheckpointedRunServiceTest {
         DiscoveryDrainRequestDto request = scoped(new DiscoveryDrainRequestDto(), HOSTS, handle);
         request.setAfterSequence(afterSequence);
         request.setMaxItems(500);
-        request.setMaxBytes(DiscoveryDrainRequestDto.MAX_BYTES_CAP);
+        request
+                .setMaxBytes(DiscoveryDrainRequestDto.MAX_BYTES_CAP
+                        - DiscoveryDrainRequestDto.CHECKPOINTED_RESPONSE_RESERVE);
         return request;
     }
 
@@ -263,6 +265,31 @@ class CheckpointedRunServiceTest {
     }
 
     // --- results ---
+
+    /**
+     * A drain that names no byte limit still gets a page that leaves room for the checkpoint beside it: the transport
+     * carries at most 10 MiB, and the checkpoint does not count against maxBytes.
+     */
+    @Test
+    void aDrainWithoutMaxBytesLeavesRoomForTheCheckpoint() throws Exception {
+        String hosts = "10.0.0.1-10.0.3.254";
+        RunHandle from = new RunHandle(RunHandle.RunState.RUNNING, 0L, 0L,
+                TargetEnumeration.of(hosts, "443", false).digest(), 0L, 0L, 0L, Map.of(), Map.of());
+        DiscoveryDrainRequestDto request = scoped(new DiscoveryDrainRequestDto(), hosts, from);
+        request.setMaxItems(1_000_000);
+        request.setMaxBytes(null);
+        CheckpointedRunService service = service(url -> chainOf(8));
+
+        DiscoveryResultsResponseDto page = service.results(request);
+
+        long pageBytes = page.getItems().size() * TargetProber.weightOf(certificate.getEncoded().length);
+        Assertions.assertTrue(page.getMore(), "the byte bound, not the targets, ended the page");
+        Assertions
+                .assertTrue(
+                        pageBytes <= DiscoveryDrainRequestDto.MAX_BYTES_CAP
+                                - DiscoveryDrainRequestDto.CHECKPOINTED_RESPONSE_RESERVE,
+                        "a page of " + pageBytes + " bytes leaves no room for its checkpoint");
+    }
 
     @Test
     void resultsServesAPageAndTheCheckpointAfterIt() {
