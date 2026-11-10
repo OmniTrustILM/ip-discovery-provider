@@ -226,9 +226,12 @@ class SliceScannerTest {
     void oversizedFirstTargetThrows() {
         TargetEnumeration targets = TargetEnumeration.of("10.0.0.1-10.0.0.4", "443", false);
 
+        SliceScanner scanner = scanner(answering(3));
+        RunHandle from = at(targets, 2, 5);
+
         TargetTooLargeException thrown = Assertions
-                .assertThrows(TargetTooLargeException.class, () -> scanner(answering(3))
-                        .scan(at(targets, 2, 5), targets, 5, 2, ROOMY_BYTES, 1, CERTIFICATES));
+                .assertThrows(TargetTooLargeException.class,
+                        () -> scanner.scan(from, targets, 5, 2, ROOMY_BYTES, 1, CERTIFICATES));
 
         Assertions.assertEquals(2, thrown.index());
         Assertions.assertEquals(3, thrown.items());

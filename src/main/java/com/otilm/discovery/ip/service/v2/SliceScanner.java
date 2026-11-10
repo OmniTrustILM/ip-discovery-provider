@@ -215,15 +215,14 @@ public class SliceScanner {
         long committed = 0;
         long failed = 0;
         long empty = 0;
-        Map<String, Long> yield = new HashMap<>();
+        Map<String, Long> produced = new HashMap<>();
         Map<String, Long> failures = new HashMap<>();
 
         for (TargetResult result : results) {
-            if (items.size() >= maxItems || bytes >= maxBytes) {
-                break;
-            }
-            if (items.size() + result.items().size() > maxItems || bytes + result.itemBytes() > maxBytes) {
-                if (committed == 0) {
+            boolean pageFull = items.size() >= maxItems || bytes >= maxBytes;
+            boolean fits = items.size() + result.items().size() <= maxItems && bytes + result.itemBytes() <= maxBytes;
+            if (pageFull || !fits) {
+                if (!pageFull && committed == 0) {
                     throw new TargetTooLargeException(result.index(), result.items().size(), result.itemBytes(),
                             maxItems, maxBytes);
                 }
@@ -232,7 +231,7 @@ public class SliceScanner {
             for (DiscoveredItemDto item : result.items()) {
                 item.setSequence(afterSequence + items.size() + 1);
                 items.add(item);
-                yield.merge(resourceOf(item).getCode(), 1L, Long::sum);
+                produced.merge(resourceOf(item).getCode(), 1L, Long::sum);
             }
             bytes += result.itemBytes();
             committed++;
@@ -248,7 +247,7 @@ public class SliceScanner {
             }
         }
 
-        RunHandle next = from.advance(committed, failed, empty, items.size(), yield, failures);
+        RunHandle next = from.advance(committed, failed, empty, items.size(), produced, failures);
         return new Slice(List.copyOf(items), next, next.cursorIndex() < total);
     }
 

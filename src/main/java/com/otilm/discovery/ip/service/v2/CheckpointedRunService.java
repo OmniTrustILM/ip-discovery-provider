@@ -169,7 +169,7 @@ public class CheckpointedRunService {
         }
 
         RunHandle next = slice.next();
-        if (next.cursorIndex() > from.cursorIndex()) {
+        if (next.cursorIndex() > from.cursorIndex() && logger.isInfoEnabled()) {
             logger
                     .info("Run {} scanned targets {} to {} of {}: {} items above sequence {} ({} empty, {} failed{})",
                             runId, from.cursorIndex(), next.cursorIndex(), targets.size(), slice.items().size(),
