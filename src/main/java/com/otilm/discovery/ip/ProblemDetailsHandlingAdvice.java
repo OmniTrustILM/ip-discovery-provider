@@ -7,10 +7,10 @@ import com.otilm.api.model.common.error.ProblemDetailExtended;
 import com.otilm.discovery.ip.api.v2.AttributeCallbackNotSupportedException;
 import com.otilm.discovery.ip.api.v2.AttributeDefinitionNotFoundException;
 import com.otilm.discovery.ip.api.v2.CheckpointLostException;
-import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.ConnectorBusyException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
-import com.otilm.discovery.ip.service.v2.BufferBudget;
+import com.otilm.discovery.ip.service.v2.TargetTooLargeException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,7 +146,7 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
 
     /**
      * Core reads a 404 carrying this code as definitive: the run cannot be recovered by retrying, and it ends FAILED.
-     * That is the honest answer for a run this node never had, or one whose buffer a restart took with it.
+     * That is the honest answer for a checkpoint that disagrees with Core's cursor or with the run's targets.
      */
     @ExceptionHandler(UnknownRunException.class)
     public ProblemDetail handleUnknownRun(UnknownRunException ex) {
@@ -178,29 +178,31 @@ public class ProblemDetailsHandlingAdvice extends ResponseEntityExceptionHandler
     }
 
     /**
-     * A node at its run cap, answered as retryable.
-     *
-     * <p>
-     * <b>Current Core behaviour:</b> Core does not retry. It ends the run on any initiate failure and renders this code
-     * as the connector being unreachable, so an operator whose node is merely full is told it is down.
-     *
-     * <p>
-     * <b>Contract gap:</b> saying so honestly needs a capacity code in the contract.
+     * A node too busy to take the call. Core retries a checkpointed run shortly without counting a failure; the hint is
+     * short because a slice ends within seconds and frees its slot.
      */
-    @ExceptionHandler(NodeAtCapacityException.class)
-    public ProblemDetail handleNodeAtCapacity(NodeAtCapacityException ex) {
-        LOG.warn("Refusing a run: {}", ex.getMessage());
-        return ProblemDetailExtended.fromErrorCode(ErrorCode.SERVICE_UNAVAILABLE, ex.getMessage(), null, null);
+    @ExceptionHandler(ConnectorBusyException.class)
+    public ResponseEntity<ProblemDetail> handleConnectorBusy(ConnectorBusyException ex) {
+        LOG.warn("Refusing a call: {}", ex.getMessage());
+        ProblemDetailExtended problem = ProblemDetailExtended
+                .fromErrorCode(ErrorCode.SERVICE_UNAVAILABLE, ex.getMessage(), null, null);
+        problem.setRetryAfterSeconds(BUSY_RETRY_AFTER_SECONDS);
+        return ResponseEntity
+                .status(ErrorCode.SERVICE_UNAVAILABLE.getStatus())
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(BUSY_RETRY_AFTER_SECONDS))
+                .body(problem);
     }
 
+    private static final int BUSY_RETRY_AFTER_SECONDS = 5;
+
     /**
-     * The run cannot continue and says which bound stopped it. Reported rather than truncated: a short answer would
-     * look like a completed scan that found less.
+     * One target produced more than a page may carry. Its items cannot be split and must not be skipped, so the run
+     * ends here, naming the limit.
      */
-    @ExceptionHandler(BufferBudget.BufferLimitExceededException.class)
-    public ProblemDetail handleBufferLimit(BufferBudget.BufferLimitExceededException ex) {
-        LOG.error("Buffer limit reached: {}", ex.getMessage());
-        return ProblemDetailExtended.fromErrorCode(ErrorCode.SERVICE_UNAVAILABLE, ex.getMessage(), null, null);
+    @ExceptionHandler(TargetTooLargeException.class)
+    public ProblemDetail handleTargetTooLarge(TargetTooLargeException ex) {
+        LOG.error("Target larger than a page: {}", ex.getMessage());
+        return ProblemDetailExtended.fromErrorCode(ErrorCode.VALIDATION_FAILED, ex.getMessage(), null, null);
     }
 
     @ExceptionHandler(NotFoundException.class)

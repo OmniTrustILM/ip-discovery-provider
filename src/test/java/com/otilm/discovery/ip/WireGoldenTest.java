@@ -189,21 +189,24 @@ class WireGoldenTest {
                    "content":[{"data":"127.0.0.1","contentType":"string"}],"version":"v3"},
                   {"uuid":"acc48fc4-803e-45b1-951f-02764abcbbe8","name":"data_ports","contentType":"string",
                    "content":[{"data":"%d","contentType":"string"}],"version":"v3"}]""".formatted(RUN_ID, tlsPort);
-        String run = "{" + scope + "}";
-        HttpResponse<String> initiated = post("/v2/discoveryProvider/discoveries/initiate", run);
+        String offered = scope + ",\"deliveryModes\":[\"checkpointed\",\"buffered\"]";
+        HttpResponse<String> initiated = post("/v2/discoveryProvider/discoveries/initiate", "{" + offered + "}");
         assertGolden("v2-initiate", initiated);
-        String checkpoint = JSON.readTree(initiated.body()).get("checkpoint").toString();
+        String initial = JSON.readTree(initiated.body()).get("checkpoint").toString();
 
-        await()
-                .atMost(Duration.ofSeconds(30))
-                .until(() -> post("/v2/discoveryProvider/discoveries/status", run).body(),
-                        status -> status.contains("\"completed\""));
-        assertGolden("v2-status", post("/v2/discoveryProvider/discoveries/status", run));
         assertGolden("v2-status-with-checkpoint",
-                post("/v2/discoveryProvider/discoveries/status", "{" + scope + ",\"checkpoint\":" + checkpoint + "}"));
-        assertGolden("v2-results",
-                post("/v2/discoveryProvider/discoveries/results", "{" + scope + ",\"afterSequence\":0}"));
-        assertGolden("v2-cancel", post("/v2/discoveryProvider/discoveries/cancel", run));
+                post("/v2/discoveryProvider/discoveries/status", "{" + offered + ",\"checkpoint\":" + initial + "}"));
+        assertGolden("v2-results-busy", post("/v2/discoveryProvider/discoveries/results",
+                "{" + scope + ",\"checkpoint\":" + initial + ",\"afterSequence\":0}"));
+        HttpResponse<String> page = post("/v2/discoveryProvider/discoveries/results",
+                "{" + offered + ",\"checkpoint\":" + initial + ",\"afterSequence\":0}");
+        assertGolden("v2-results", page);
+        String next = JSON.readTree(page.body()).get("checkpoint").toString();
+
+        assertGolden("v2-status",
+                post("/v2/discoveryProvider/discoveries/status", "{" + offered + ",\"checkpoint\":" + next + "}"));
+        assertGolden("v2-cancel",
+                post("/v2/discoveryProvider/discoveries/cancel", "{" + offered + ",\"checkpoint\":" + next + "}"));
     }
 
     private static String callback(String attributeUuid) {

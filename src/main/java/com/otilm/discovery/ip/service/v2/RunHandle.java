@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.otilm.api.exception.ValidationException;
 import com.otilm.api.model.common.attribute.common.AttributeType;
 import com.otilm.api.model.common.attribute.common.MetadataAttribute;
@@ -18,16 +19,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * The checkpoint. Returned from initiate, stop and resume, replayed by Core on every later call, and the only place a
- * run's position survives — the connector keeps no storage of its own.
+ * The checkpoint. Returned from initiate and with every results page, replayed by Core on every later call, and the
+ * only place a run's position survives — the connector keeps no storage of its own.
  *
  * <p>
  * Carried as a single metadata attribute holding JSON rather than one attribute per field. Two reasons: the cursor and
  * the sequence are {@code long}, which the integer content type cannot hold, and a checkpoint is opaque to Core, so
  * spreading it over labelled attributes would dress internal state as something an operator is meant to read.
  *
- * @param state separates a stopped run that can be rebuilt from a running one that must not be — without it, a run
- * checkpointed before it scanned anything is indistinguishable from one that never started
+ * @param state written as running and not read; kept so the wire format stays the one older checkpoints use
  * @param cursorIndex next target index to scan
  * @param sequenceHighWater highest sequence assigned; a resumed run continues this space and never restarts it
  * @param targetsDigest the resume guard: any change to enumeration order invalidates it, and the run is refused loudly
@@ -49,9 +49,13 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
      * Unknown properties are ignored rather than rejected. A handle is replayed from Core exactly as it was stored, so
      * one written by a newer connector can arrive at an older one, and refusing it would fail a run over a field that
      * older code simply does not need.
+     *
+     * <p>
+     * Map entries are written in key order, so two replicas answering the same request write the same text.
      */
     private static final ObjectMapper MAPPER = new ObjectMapper()
-            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
 
     public enum RunState {
         RUNNING,
@@ -63,20 +67,32 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
         return new RunHandle(RunState.RUNNING, 0L, 0L, targetsDigest, 0L, 0L, 0L, Map.of(), Map.of());
     }
 
-    /**
-     * The checkpoint a stop answers with. The high water comes from the buffer's own sequencer rather than the last
-     * chunk boundary: probes inside the interrupted chunk have already been numbered, and freezing the boundary value
-     * instead leaves those sequences outside the checkpoint — which a later drain then reads as a mismatch, and a
-     * resumed run reissues.
-     */
-    public RunHandle stoppedAt(long sequenceHighWater) {
-        return new RunHandle(RunState.STOPPED, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed,
-                targetsFailed, targetsEmpty, yieldByResource, failedByReason);
-    }
-
     public RunHandle withState(RunState newState) {
         return new RunHandle(newState, cursorIndex, sequenceHighWater, targetsDigest, targetsProcessed, targetsFailed,
                 targetsEmpty, yieldByResource, failedByReason);
+    }
+
+    /**
+     * The checkpoint after a slice has committed its targets. The cursor and the processed count move together, which
+     * replay checks; the state reads running whatever it was, because a stopped run that is being drained again has
+     * been resumed.
+     *
+     * @param targets targets the slice committed
+     * @param failed of those, how many failed
+     * @param empty of those, how many held nothing
+     * @param items items the slice numbered
+     */
+    public RunHandle advance(long targets, long failed, long empty, long items, Map<String, Long> yieldDelta,
+            Map<String, Long> failureDelta) {
+        return new RunHandle(RunState.RUNNING, cursorIndex + targets, sequenceHighWater + items, targetsDigest,
+                targetsProcessed + targets, targetsFailed + failed, targetsEmpty + empty,
+                merged(yieldByResource, yieldDelta), merged(failedByReason, failureDelta));
+    }
+
+    private static Map<String, Long> merged(Map<String, Long> counts, Map<String, Long> delta) {
+        Map<String, Long> merged = new java.util.HashMap<>(Objects.requireNonNullElse(counts, Map.of()));
+        delta.forEach((key, count) -> merged.merge(key, count, Long::sum));
+        return Map.copyOf(merged);
     }
 
     /** The checkpoint as Core will replay it. */
@@ -162,7 +178,7 @@ public record RunHandle(RunState state, long cursorIndex, long sequenceHighWater
                     + targetsEmpty);
         }
         if (cursorIndex != targetsProcessed) {
-            // Every committed chunk advances both by the same count, including the short final one, so these are
+            // Every committed slice advances both by the same count, including the short final one, so these are
             // equal on any checkpoint this connector wrote. A cursor ahead of the count would resume mid-enumeration
             // and skip everything in between, on a run that still reports success.
             throw new ValidationException(

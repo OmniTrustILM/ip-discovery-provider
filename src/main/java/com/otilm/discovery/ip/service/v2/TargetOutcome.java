@@ -26,6 +26,8 @@ import javax.net.ssl.SSLHandshakeException;
  */
 enum TargetOutcome {
 
+    /** The target presented a certificate chain. */
+    FOUND,
     EMPTY,
     FAILED;
 
@@ -83,12 +85,21 @@ enum TargetOutcome {
                 return "TLS handshake ended after the server's certificate";
             }
         }
-        return answer instanceof SSLHandshakeException ? "TLS handshake failed" : answer.getClass().getSimpleName();
+        return answer instanceof SSLHandshakeException ? "TLS handshake failed" : nameOf(answer);
     }
 
     /** The reason for a target whose certificate this connector could not turn into an item: its own fault. */
     static String unusableCertificate(Throwable failure) {
-        return "Certificate this connector could not use (" + failure.getClass().getSimpleName() + ")";
+        return "Certificate this connector could not use (" + nameOf(failure) + ")";
+    }
+
+    /**
+     * The exception's simple name, or its full name when it has none. A reason is a key in the checkpoint, which
+     * refuses a blank one on replay, and an anonymous class has no simple name.
+     */
+    private static String nameOf(Throwable failure) {
+        String simple = failure.getClass().getSimpleName();
+        return simple.isBlank() ? failure.getClass().getName() : simple;
     }
 
     /**

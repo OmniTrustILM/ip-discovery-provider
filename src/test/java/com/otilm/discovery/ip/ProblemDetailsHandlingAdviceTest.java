@@ -6,17 +6,19 @@ import com.otilm.api.model.common.error.ErrorCode;
 import com.otilm.api.model.common.error.ProblemDetailExtended;
 import com.otilm.api.model.core.auth.Resource;
 import com.otilm.discovery.ip.api.v2.CheckpointLostException;
-import com.otilm.discovery.ip.api.v2.NodeAtCapacityException;
+import com.otilm.discovery.ip.api.v2.ConnectorBusyException;
 import com.otilm.discovery.ip.api.v2.RunPastPointOfNoReturnException;
 import com.otilm.discovery.ip.api.v2.UnknownRunException;
-import com.otilm.discovery.ip.service.v2.BufferBudget;
+import com.otilm.discovery.ip.service.v2.TargetTooLargeException;
 import java.util.UUID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
@@ -140,7 +142,8 @@ class ProblemDetailsHandlingAdviceTest {
      */
     @Test
     void answers404AndOperationNotTrackedForARunThisNodeDoesNotHave() {
-        ProblemDetail problem = advice.handleUnknownRun(new UnknownRunException(UUID.randomUUID()));
+        ProblemDetail problem = advice
+                .handleUnknownRun(new UnknownRunException(UUID.randomUUID(), "the checkpoint is stale"));
 
         Assertions.assertEquals(HttpStatus.NOT_FOUND.value(), problem.getStatus());
         Assertions.assertEquals(ErrorCode.OPERATION_NOT_TRACKED, errorCodeOf(problem));
@@ -155,24 +158,30 @@ class ProblemDetailsHandlingAdviceTest {
         Assertions.assertEquals(ErrorCode.CHECKPOINT_LOST, errorCodeOf(problem));
     }
 
+    /** Core retries a busy checkpointed run shortly; the hint says how shortly, in the body and in the header. */
     @Test
-    void answers503AndServiceUnavailableForANodeAtItsRunCap() {
-        ProblemDetail problem = advice.handleNodeAtCapacity(new NodeAtCapacityException("8 runs already"));
+    void busyAnswerCarriesRetryAfter() {
+        ResponseEntity<ProblemDetail> answer = advice
+                .handleConnectorBusy(new ConnectorBusyException("32 slices already in flight"));
 
+        Assertions.assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), answer.getStatusCode().value());
+        Assertions.assertEquals("5", answer.getHeaders().getFirst(HttpHeaders.RETRY_AFTER));
+        ProblemDetailExtended problem = (ProblemDetailExtended) answer.getBody();
+        Assertions.assertNotNull(problem);
         Assertions.assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), problem.getStatus());
-        Assertions.assertEquals(ErrorCode.SERVICE_UNAVAILABLE, errorCodeOf(problem));
+        Assertions.assertEquals(ErrorCode.SERVICE_UNAVAILABLE, problem.getErrorCode());
+        Assertions.assertEquals(5, problem.getRetryAfterSeconds());
+        Assertions.assertTrue(problem.getDetail().contains("32 slices"), problem.getDetail());
     }
 
-    /** The bound that stopped the run is the message, so it reaches the wire rather than only the log. */
+    /** Ends the run, and says which limit the target did not fit, so an operator can tell it from a defect. */
     @Test
-    void answers503AndServiceUnavailableWhenARunOutgrowsItsBuffer() {
-        ProblemDetail problem = advice
-                .handleBufferLimit(
-                        new BufferBudget.BufferLimitExceededException("run holds 100000 items, the per-run cap"));
+    void answers422AndValidationFailedForATargetLargerThanAPage() {
+        ProblemDetail problem = advice.handleTargetTooLarge(new TargetTooLargeException(3, 12, 9_000, 10, 1L << 20));
 
-        Assertions.assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), problem.getStatus());
-        Assertions.assertEquals(ErrorCode.SERVICE_UNAVAILABLE, errorCodeOf(problem));
-        Assertions.assertTrue(problem.getDetail().contains("per-run cap"), problem.getDetail());
+        Assertions.assertEquals(HttpStatus.UNPROCESSABLE_CONTENT.value(), problem.getStatus());
+        Assertions.assertEquals(ErrorCode.VALIDATION_FAILED, errorCodeOf(problem));
+        Assertions.assertTrue(problem.getDetail().contains("10 items"), problem.getDetail());
     }
 
     /** The contract's answer for a stop that comes too late: Core keeps the run as it was rather than stopping it. */

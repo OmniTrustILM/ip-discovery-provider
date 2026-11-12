@@ -24,6 +24,7 @@
       "uuid" : "52cf88e4-6b87-40f5-a89d-9b6e6d676119",
       "version" : 3
     } ],
+    "deliveryMode" : "checkpointed",
     "stoppable" : true
   }
 }
