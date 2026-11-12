@@ -113,7 +113,7 @@ public class TargetProber {
             return new TargetResult(index, TargetOutcome.FOUND, List.copyOf(items), bytes, null);
         } catch (ItemNotMappedException e) {
             // Failed rather than empty: the target answered with a certificate, and it is this connector that could
-            // not use it.
+            // not use it. The certificates before it in the chain are still sent.
             return new TargetResult(index, TargetOutcome.FAILED, List.copyOf(items), bytes, e.reason);
         } catch (Exception e) {
             logger.debug("Probe of {} ended without certificates: {}", url, e.getMessage());
@@ -135,8 +135,8 @@ public class TargetProber {
      */
     private static long emit(X509Certificate certificate, String url, Set<Resource> resources,
             List<DiscoveredItemDto> items) {
-        // Both items are built before either is added. Adding the certificate and then failing to map the key would
-        // leave Core holding an item for a target this run goes on to report as failed.
+        // Both items are built before either is added, so a certificate and its key reach Core together or not at all.
+        // Certificates earlier in the chain are items of their own and are kept when a later one fails.
         DiscoveredItemDto certificateItem = null;
         long certificateWeight = 0;
         DiscoveredItemDto keyItem = null;

@@ -232,6 +232,28 @@ class TargetProberTest {
         Assertions.assertEquals(List.of(), result.items());
     }
 
+    /**
+     * Each certificate in a chain is its own item. When a later one cannot be used, the target fails under that reason,
+     * and the certificates before it still reach Core rather than being lost with it.
+     */
+    @Test
+    void keepsTheCertificatesBeforeOneItCannotUse() throws Exception {
+        X509Certificate unmappable = Mockito.mock(X509Certificate.class);
+        Mockito.when(unmappable.getEncoded()).thenThrow(new CertificateEncodingException("no encoding"));
+
+        TargetResult result = probeOnce(url -> chainOf(certificate, unmappable), Set.of(Resource.CERTIFICATE));
+
+        Assertions.assertEquals(TargetOutcome.FAILED, result.outcome());
+        Assertions
+                .assertEquals("Certificate this connector could not use (CertificateEncodingException)",
+                        result.failureReason());
+        Assertions.assertEquals(1, result.items().size());
+        Assertions
+                .assertEquals(Base64.getEncoder().encodeToString(certificate.getEncoded()),
+                        ((DiscoveredCertificateDto) result.items().getFirst().getPayload()).getCertificateData());
+        Assertions.assertEquals(TargetProber.weightOf(certificate.getEncoded().length), result.itemBytes());
+    }
+
     /** Publishing the certificate and then failing on its key would hand Core half of a failed target's pair. */
     @Test
     void buildsNeitherItemWhenTheKeyCannotBeMapped() throws Exception {
