@@ -198,7 +198,12 @@ class StatelessServingTest {
         Assertions.assertEquals(200L, second.status(status).getHighestSequence());
     }
 
-    /** Core may deliver one drain twice at once; both answers must be the same page and the same checkpoint. */
+    /**
+     * Core may deliver one drain twice at once. When neither answer is cut short by its scan budget, as here, where
+     * every probe answers at once and the page limit ends the slice, both are the same page and the same checkpoint.
+     * Under uneven load one replica's budget can run out first; its answer is then a prefix of the other's, and Core
+     * applies whichever it receives first by checkpoint revision.
+     */
     @Test
     void oneRequestServedByBothReplicasAtOnceGivesTheSameAnswer() throws Exception {
         UUID runId = UUID.randomUUID();
